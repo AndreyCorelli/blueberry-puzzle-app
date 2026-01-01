@@ -16,8 +16,9 @@
       "supportsTablet": true
     },
     "android": {
+      "package": "com.andreisitaev.blueberrytrio",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
@@ -25,6 +26,11 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "2d5b1d8b-c45e-48ff-bd45-b215e975d26e"
+      }
     }
   }
 }
