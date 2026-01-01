@@ -13,6 +13,117 @@ import type { Puzzle } from "./src/core/blueberryCore";
 
 type PlayerCellState = -1 | 0 | 1; // -1 = marked empty, 0 = unknown, 1 = berry
 
+type Violations = {
+  row: boolean[];
+  col: boolean[];
+  block: boolean[];
+  clueArea: boolean[][];
+};
+
+function computeViolations(board: PlayerCellState[][], puzzle: Puzzle): Violations {
+  const row = new Array<boolean>(N).fill(false);
+  const col = new Array<boolean>(N).fill(false);
+  const block = new Array<boolean>(N).fill(false);
+  const clueArea: boolean[][] = Array.from({ length: N }, () =>
+    new Array<boolean>(N).fill(false),
+  );
+
+  // --- Row violations ---
+  for (let r = 0; r < N; r++) {
+    let berries = 0;
+    let unknown = 0;
+    for (let c = 0; c < N; c++) {
+      const v = board[r]?.[c] ?? 0;
+      if (v === 1) berries++;
+      else if (v === 0) unknown++;
+    }
+    if (berries > 3 || (unknown === 0 && berries !== 3)) {
+      row[r] = true;
+    }
+  }
+
+  // --- Column violations ---
+  for (let c = 0; c < N; c++) {
+    let berries = 0;
+    let unknown = 0;
+    for (let r = 0; r < N; r++) {
+      const v = board[r]?.[c] ?? 0;
+      if (v === 1) berries++;
+      else if (v === 0) unknown++;
+    }
+    if (berries > 3 || (unknown === 0 && berries !== 3)) {
+      col[c] = true;
+    }
+  }
+
+  // --- 3x3 block violations ---
+  for (let br = 0; br < 3; br++) {
+    for (let bc = 0; bc < 3; bc++) {
+      let berries = 0;
+      let unknown = 0;
+      for (let r = br * 3; r < br * 3 + 3; r++) {
+        for (let c = bc * 3; c < bc * 3 + 3; c++) {
+          const v = board[r]?.[c] ?? 0;
+          if (v === 1) berries++;
+          else if (v === 0) unknown++;
+        }
+      }
+      const blockIndex = br * 3 + bc;
+      if (berries > 3 || (unknown === 0 && berries !== 3)) {
+        block[blockIndex] = true;
+      }
+    }
+  }
+
+  // --- Clue-based violations ---
+  const NEIGHBOR_DIRS: Array<[number, number]> = [
+    [-1, -1],
+    [-1, 0],
+    [-1, 1],
+    [0, -1],
+    [0, 1],
+    [1, -1],
+    [1, 0],
+    [1, 1],
+  ];
+
+  for (let r = 0; r < N; r++) {
+    for (let c = 0; c < N; c++) {
+      const clueVal = puzzle.puzzleClues[r][c];
+      if (clueVal === null) continue;
+
+      let berries = 0;
+      let unknown = 0;
+
+      for (const [dr, dc] of NEIGHBOR_DIRS) {
+        const nr = r + dr;
+        const nc = c + dc;
+        if (nr < 0 || nr >= N || nc < 0 || nc >= N) continue;
+        const v = board[nr]?.[nc] ?? 0;
+        if (v === 1) berries++;
+        else if (v === 0) unknown++;
+      }
+
+      const violated =
+        berries > clueVal || berries + unknown < clueVal;
+
+      if (violated) {
+        // highlight the clue itself
+        clueArea[r][c] = true;
+        // and all its neighbors
+        for (const [dr, dc] of NEIGHBOR_DIRS) {
+          const nr = r + dr;
+          const nc = c + dc;
+          if (nr < 0 || nr >= N || nc < 0 || nc >= N) continue;
+          clueArea[nr][nc] = true;
+        }
+      }
+    }
+  }
+
+  return { row, col, block, clueArea };
+}
+
 export default function App() {
   const [puzzle, setPuzzle] = useState<Puzzle | null>(null);
   const [playerBoard, setPlayerBoard] = useState<PlayerCellState[][]>([]);
@@ -20,6 +131,14 @@ export default function App() {
   const [status, setStatus] = useState<string>("");
   const [statusOk, setStatusOk] = useState<boolean | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [violations, setViolations] = useState<Violations>({
+    row: new Array<boolean>(N).fill(false),
+    col: new Array<boolean>(N).fill(false),
+    block: new Array<boolean>(N).fill(false),
+    clueArea: Array.from({ length: N }, () =>
+      new Array<boolean>(N).fill(false),
+    ),
+  });
 
   function createEmptyPlayerBoard(): PlayerCellState[][] {
     return Array.from({ length: N }, () =>
@@ -33,13 +152,14 @@ export default function App() {
     setStatusOk(null);
     setShowSolution(false);
 
-    // Defer heavy generation slightly so the UI can render first
     setTimeout(() => {
       console.log("Generating puzzle...");
       const p = makePuzzle();
       console.log("Puzzle generated");
       setPuzzle(p);
-      setPlayerBoard(createEmptyPlayerBoard());
+      const empty = createEmptyPlayerBoard();
+      setPlayerBoard(empty);
+      setViolations(computeViolations(empty, p));
       setIsGenerating(false);
     }, 0);
   }
@@ -61,6 +181,8 @@ export default function App() {
       else if (current === 1) nextVal = -1;
       else nextVal = 0;
       next[r][c] = nextVal;
+
+      setViolations(computeViolations(next, puzzle));
       return next;
     });
   }
@@ -83,6 +205,8 @@ export default function App() {
       }
       if (!allMatch) break;
     }
+
+    setViolations(computeViolations(playerBoard, puzzle));
 
     if (allMatch) {
       setStatus("✅ Correct! Puzzle solved.");
@@ -122,10 +246,16 @@ export default function App() {
     const solutionBerry = puzzle.solution[r][c] === 1;
     const state = playerBoard[r]?.[c] ?? 0;
 
+    const blockIndex = Math.floor(r / 3) * 3 + Math.floor(c / 3);
+    const isUnitViolated =
+      violations.row[r] || violations.col[c] || violations.block[blockIndex];
+    const isClueAreaViolated = violations.clueArea[r]?.[c] ?? false;
+
     let text = "";
     const cellStyles = [styles.cell, getCellBorderStyle(r, c)];
 
     if (showSolution) {
+      // Solution view: berries + clues
       if (solutionBerry) {
         text = "●";
         cellStyles.push(styles.cellSolutionBerry);
@@ -134,6 +264,7 @@ export default function App() {
         cellStyles.push(styles.cellClue);
       }
     } else {
+      // Normal play view
       if (clue !== null) {
         text = String(clue);
         cellStyles.push(styles.cellClue);
@@ -143,6 +274,13 @@ export default function App() {
       } else if (state === -1) {
         text = "×";
         cellStyles.push(styles.cellPlayerEmpty);
+      }
+
+      if (isUnitViolated) {
+        cellStyles.push(styles.cellViolation);
+      }
+      if (isClueAreaViolated) {
+        cellStyles.push(styles.cellClueAreaViolation);
       }
     }
 
@@ -305,6 +443,13 @@ const styles = StyleSheet.create({
   },
   cellPlayerEmpty: {
     color: "#9ca3af",
+  },
+  cellViolation: {
+    borderColor: "#dc2626",
+    borderWidth: 2,
+  },
+  cellClueAreaViolation: {
+    backgroundColor: "#fef3c7", // light amber for clue-related issues
   },
   buttonsRow: {
     flexDirection: "row",
