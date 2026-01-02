@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   SafeAreaView,
   View,
@@ -7,12 +7,15 @@ import {
   StyleSheet,
   StatusBar,
   ActivityIndicator,
+  Animated,
+  Easing,
   StyleProp,
-  ViewStyle,
   TextStyle,
+  ViewStyle,
 } from "react-native";
 import { makePuzzle, N } from "./src/core/blueberryCore";
 import type { Puzzle } from "./src/core/blueberryCore";
+import { computeClueAreaViolations } from "./src/core/clueCheck";
 
 type PlayerCellState = -1 | 0 | 1; // -1 = marked empty, 0 = unknown, 1 = berry
 
@@ -27,9 +30,7 @@ function computeViolations(board: PlayerCellState[][], puzzle: Puzzle): Violatio
   const row = new Array<boolean>(N).fill(false);
   const col = new Array<boolean>(N).fill(false);
   const block = new Array<boolean>(N).fill(false);
-  const clueArea: boolean[][] = Array.from({ length: N }, () =>
-    new Array<boolean>(N).fill(false),
-  );
+  const { clueArea } = computeClueAreaViolations(board, puzzle.puzzleClues);  
 
   // --- Row violations ---
   for (let r = 0; r < N; r++) {
@@ -78,52 +79,6 @@ function computeViolations(board: PlayerCellState[][], puzzle: Puzzle): Violatio
     }
   }
 
-  // --- Clue-based violations ---
-  const NEIGHBOR_DIRS: Array<[number, number]> = [
-    [-1, -1],
-    [-1, 0],
-    [-1, 1],
-    [0, -1],
-    [0, 1],
-    [1, -1],
-    [1, 0],
-    [1, 1],
-  ];
-
-  for (let r = 0; r < N; r++) {
-    for (let c = 0; c < N; c++) {
-      const clueVal = puzzle.puzzleClues[r][c];
-      if (clueVal === null) continue;
-
-      let berries = 0;
-      let unknown = 0;
-
-      for (const [dr, dc] of NEIGHBOR_DIRS) {
-        const nr = r + dr;
-        const nc = c + dc;
-        if (nr < 0 || nr >= N || nc < 0 || nc >= N) continue;
-        const v = board[nr]?.[nc] ?? 0;
-        if (v === 1) berries++;
-        else if (v === 0) unknown++;
-      }
-
-      const violated =
-        berries > clueVal || berries + unknown < clueVal;
-
-      if (violated) {
-        // highlight the clue itself
-        clueArea[r][c] = true;
-        // and all its neighbors
-        for (const [dr, dc] of NEIGHBOR_DIRS) {
-          const nr = r + dr;
-          const nc = c + dc;
-          if (nr < 0 || nr >= N || nc < 0 || nc >= N) continue;
-          clueArea[nr][nc] = true;
-        }
-      }
-    }
-  }
-
   return { row, col, block, clueArea };
 }
 
@@ -155,6 +110,7 @@ export default function App() {
   
   const readyToCheck =
   !!puzzle && !showSolution && totalBerries === TOTAL_BERRIES_REQUIRED;
+  const checkPulse = React.useRef(new Animated.Value(1)).current;
 
   function createEmptyPlayerBoard(): PlayerCellState[][] {
     return Array.from({ length: N }, () =>
@@ -374,6 +330,39 @@ export default function App() {
     );
   }
   
+  useEffect(() => {
+    if (!readyToCheck) {
+      checkPulse.stopAnimation();
+      checkPulse.setValue(1);
+      return;
+    }
+  
+    const anim = Animated.loop(
+      Animated.sequence([
+        Animated.timing(checkPulse, {
+          toValue: 1.12,
+          duration: 220,
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.timing(checkPulse, {
+          toValue: 1,
+          duration: 220,
+          easing: Easing.in(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.delay(200),
+      ]),
+    );
+  
+    anim.start();
+  
+    return () => {
+      anim.stop();
+      checkPulse.stopAnimation();
+      checkPulse.setValue(1);
+    };
+  }, [readyToCheck, checkPulse]);
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -406,13 +395,17 @@ export default function App() {
             </View>
 
             {/* Row: Check */}
-            <Pressable
-              style={[styles.button, readyToCheck && styles.buttonCheckReady]}
-              onPress={checkSolution}
-              disabled={isGenerating}
-            >
-              <Text style={styles.buttonText}>Check</Text>
-            </Pressable>
+            <View style={styles.checkWrap}>
+              <Animated.View style={{ transform: [{ scale: checkPulse }] }}>
+                <Pressable
+                  style={[styles.button, readyToCheck && styles.buttonCheckReady]}
+                  onPress={checkSolution}
+                  disabled={isGenerating}
+                >
+                  <Text style={styles.buttonText}>Check</Text>
+                </Pressable>
+              </Animated.View>
+            </View>
 
             {/* Row: Undo / Redo / Clear */}
             <View style={styles.buttonsRow}>
@@ -612,6 +605,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 6,
     marginHorizontal: 4,
+    marginBottom: 8,
   },
   buttonWide: {
     backgroundColor: "#2563eb",
@@ -628,7 +622,6 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   buttonCheckReady: {
-    transform: [{ scale: 1.12 }],
     borderWidth: 2,
     borderColor: "#111827",
   },
@@ -702,5 +695,8 @@ const styles = StyleSheet.create({
   },
   difficultyPillTextActive: {
     color: "#111827",
-  },  
+  },
+  checkWrap: {
+    marginBottom: 10, // reserved spacing so pulse never overlaps Undo/Redo/Clear
+  },
 });
