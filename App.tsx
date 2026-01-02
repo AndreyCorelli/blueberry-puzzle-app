@@ -368,7 +368,7 @@ export default function App() {
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="dark-content" />
       <View style={styles.container}>
-        <Text style={styles.title}>Blueberry Trio</Text>
+        <Text style={styles.title}>Blueberry Puzzle</Text>
         <Text style={styles.subtitle}>3 berries per row, column & block</Text>
 
         {!puzzle && !isGenerating && (

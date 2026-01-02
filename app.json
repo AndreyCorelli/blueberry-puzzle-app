@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "blueberry-trio-app",
-    "slug": "blueberry-trio-app",
+    "name": "blueberry-puzzle-app",
+    "slug": "blueberry-puzzle-app",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -16,7 +16,7 @@
       "supportsTablet": true
     },
     "android": {
-      "package": "com.andreisitaev.blueberrytrio",
+      "package": "com.andreisitaev.blueberrypuzzle",
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#ffffff"
@@ -29,8 +29,9 @@
     },
     "extra": {
       "eas": {
-        "projectId": "2d5b1d8b-c45e-48ff-bd45-b215e975d26e"
+        "projectId": "9a35d32e-5d3d-4e55-aa34-951083805334"
       }
-    }
+    },
+    "owner": "andrey.sitaev"
   }
 }

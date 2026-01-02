@@ -1,6 +1,6 @@
-# Blueberry Trio – Android Puzzle App (Expo + React Native)
+# Blueberry Puzzle – Android Puzzle App (Expo + React Native)
 
-Blueberry Trio is a logic puzzle game inspired by Minesweeper and Sudoku-like block rules.
+This project is an independent implementation inspired by the [Blueberry Trio](https://circle9puzzle.com/bbtrio/) logic puzzle.
 
 Each puzzle has a **unique solution** and must satisfy:
 
@@ -76,8 +76,8 @@ You can skip global installs and call them with npx expo / npx eas-cli if you pr
 ## 2. Cloning the project
 
 ```shell
-git clone <your-repo-url> blueberry-trio-app
-cd blueberry-trio-app
+git clone https://github.com/AndreyCorelli/blueberry-trio-app.git blueberry-puzzle-app
+cd blueberry-puzzle-app
 ```
 
 ## 3. Installing dependencies
