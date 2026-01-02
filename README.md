@@ -1,3 +1,14 @@
+## Testing on Google Play 🙏
+
+This app is currently in Google Play closed testing.
+
+If you would like to help by testing the app:
+- you only need an Android device
+- no feedback is required
+- please keep the app installed for 14 days
+
+To join the test, open an issue in this repository or contact the developer via GitHub.
+
 # Blueberry Puzzle – Android Puzzle App (Expo + React Native)
 
 This project is an independent implementation inspired by the [Blueberry Trio](https://circle9puzzle.com/bbtrio/) logic puzzle.
