@@ -7,6 +7,9 @@ import {
   StyleSheet,
   StatusBar,
   ActivityIndicator,
+  StyleProp,
+  ViewStyle,
+  TextStyle,
 } from "react-native";
 import { makePuzzle, N } from "./src/core/blueberryCore";
 import type { Puzzle } from "./src/core/blueberryCore";
@@ -131,7 +134,7 @@ export default function App() {
   const [status, setStatus] = useState<string>("");
   const [statusOk, setStatusOk] = useState<boolean | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [useDense, setUseDense] = useState(true); // "optimized clues" mode
+  const [useDense, setUseDense] = useState(false); // "optimized clues" mode
   const [violations, setViolations] = useState<Violations>({
     row: new Array<boolean>(N).fill(false),
     col: new Array<boolean>(N).fill(false),
@@ -145,6 +148,13 @@ export default function App() {
 
   const canUndo = history.length > 0;
   const canRedo = future.length > 0;
+  const totalBerries = playerBoard.reduce(
+    (acc, row) => acc + row.filter((v) => v === 1).length,
+    0,
+  );
+  
+  const readyToCheck =
+  !!puzzle && !showSolution && totalBerries === TOTAL_BERRIES_REQUIRED;
 
   function createEmptyPlayerBoard(): PlayerCellState[][] {
     return Array.from({ length: N }, () =>
@@ -288,10 +298,6 @@ export default function App() {
     setStatusOk(null);
   }
 
-  function toggleDense() {
-    setUseDense((prev) => !prev);
-  }
-
   function getCellBorderStyle(r: number, c: number) {
     const top = r === 0 ? 2 : r % 3 === 0 ? 2 : 1;
     const left = c === 0 ? 2 : c % 3 === 0 ? 2 : 1;
@@ -310,41 +316,45 @@ export default function App() {
 
   function renderCell(r: number, c: number) {
     if (!puzzle) return null;
-
+  
     const clue = puzzle.puzzleClues[r][c];
     const solutionBerry = puzzle.solution[r][c] === 1;
     const state = playerBoard[r]?.[c] ?? 0;
-
+  
     const blockIndex = Math.floor(r / 3) * 3 + Math.floor(c / 3);
     const isUnitViolated =
       violations.row[r] || violations.col[c] || violations.block[blockIndex];
     const isClueAreaViolated = violations.clueArea[r]?.[c] ?? false;
-
+  
     let text = "";
-    const cellStyles = [styles.cell, getCellBorderStyle(r, c)];
-
+  
+    const cellStyles: StyleProp<ViewStyle>[] = [
+      styles.cell,
+      getCellBorderStyle(r, c),
+    ];
+  
+    const textStyles: StyleProp<TextStyle>[] = [styles.cellText];
+  
     if (showSolution) {
-      // Solution view: berries + clues
       if (solutionBerry) {
         text = "●";
         cellStyles.push(styles.cellSolutionBerry);
       } else if (clue !== null) {
         text = String(clue);
-        cellStyles.push(styles.cellClue);
+        textStyles.push(styles.cellClue);
       }
     } else {
-      // Normal play view
       if (clue !== null) {
         text = String(clue);
-        cellStyles.push(styles.cellClue);
+        textStyles.push(styles.cellClue);
       } else if (state === 1) {
         text = "●";
         cellStyles.push(styles.cellPlayerBerry);
       } else if (state === -1) {
         text = "×";
-        cellStyles.push(styles.cellPlayerEmpty);
+        textStyles.push(styles.cellPlayerEmpty);
       }
-
+  
       if (isUnitViolated) {
         cellStyles.push(styles.cellViolation);
       }
@@ -352,17 +362,18 @@ export default function App() {
         cellStyles.push(styles.cellClueAreaViolation);
       }
     }
-
+  
     return (
       <Pressable
         key={`${r}-${c}`}
         style={cellStyles}
         onPress={() => handleCellPress(r, c)}
       >
-        <Text style={styles.cellText}>{text}</Text>
+        <Text style={textStyles}>{text}</Text>
       </Pressable>
     );
   }
+  
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -395,15 +406,13 @@ export default function App() {
             </View>
 
             {/* Row: Check */}
-            <View style={styles.buttonsRow}>
-              <Pressable
-                style={styles.button}
-                onPress={checkSolution}
-                disabled={isGenerating}
-              >
-                <Text style={styles.buttonText}>Check</Text>
-              </Pressable>
-            </View>
+            <Pressable
+              style={[styles.button, readyToCheck && styles.buttonCheckReady]}
+              onPress={checkSolution}
+              disabled={isGenerating}
+            >
+              <Text style={styles.buttonText}>Check</Text>
+            </Pressable>
 
             {/* Row: Undo / Redo / Clear */}
             <View style={styles.buttonsRow}>
@@ -450,15 +459,48 @@ export default function App() {
         )}
 
         {/* Optimized / dense clues toggle */}
-        <Pressable
-          style={styles.toggleSmall}
-          onPress={toggleDense}
-          disabled={isGenerating}
-        >
-          <Text style={styles.toggleTextSmall}>
-            Optimized clues: {useDense ? "ON" : "OFF"}
-          </Text>
-        </Pressable>
+        <View style={styles.difficultyWrap}>
+          <Text style={styles.difficultyLabel}>Next puzzle difficulty</Text>
+
+          <View style={styles.difficultyRow}>
+            <Pressable
+              style={[
+                styles.difficultyPill,
+                !useDense && styles.difficultyPillActive,
+              ]}
+              onPress={() => setUseDense(false)}
+              disabled={isGenerating}
+            >
+              <Text
+                style={[
+                  styles.difficultyPillText,
+                  !useDense && styles.difficultyPillTextActive,
+                ]}
+              >
+                HIGH
+              </Text>
+            </Pressable>
+
+            <Pressable
+              style={[
+                styles.difficultyPill,
+                useDense && styles.difficultyPillActive,
+              ]}
+              onPress={() => setUseDense(true)}
+              disabled={isGenerating}
+            >
+              <Text
+                style={[
+                  styles.difficultyPillText,
+                  useDense && styles.difficultyPillTextActive,
+                ]}
+              >
+                More Clues
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+
 
         {/* Big generate button */}
         <Pressable
@@ -491,6 +533,7 @@ export default function App() {
 }
 
 const CELL_SIZE = 32;
+const TOTAL_BERRIES_REQUIRED = 27;
 
 const styles = StyleSheet.create({
   safe: {
@@ -584,6 +627,11 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontWeight: "600",
   },
+  buttonCheckReady: {
+    transform: [{ scale: 1.12 }],
+    borderWidth: 2,
+    borderColor: "#111827",
+  },
   toggle: {
     marginBottom: 4,
   },
@@ -621,4 +669,38 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     fontSize: 14,
   },
+  difficultyWrap: {
+    marginTop: 6,
+    marginBottom: 6,
+    alignItems: "center",
+  },
+  difficultyLabel: {
+    fontSize: 12,
+    color: "#374151",
+    marginBottom: 6,
+  },
+  difficultyRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  difficultyPill: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#9ca3af",
+    backgroundColor: "#fff",
+  },
+  difficultyPillActive: {
+    borderColor: "#111827",
+    borderWidth: 2,
+  },
+  difficultyPillText: {
+    fontSize: 12,
+    color: "#374151",
+    fontWeight: "600",
+  },
+  difficultyPillTextActive: {
+    color: "#111827",
+  },  
 });
