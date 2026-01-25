@@ -12,6 +12,7 @@ import {
   StyleProp,
   TextStyle,
   ViewStyle,
+  Dimensions,
 } from "react-native";
 import { makePuzzle, N, solveOneFromClueGrid } from "./src/core/blueberryCore";
 import type { Puzzle } from "./src/core/blueberryCore";
@@ -96,7 +97,24 @@ function createEmptyPlayerBoard(): PlayerCellState[][] {
   return Array.from({ length: N }, () => new Array<PlayerCellState>(N).fill(0));
 }
 
-const CELL_SIZE = 32;
+function getResponsiveCellSize(): number {
+  const { width, height } = Dimensions.get('window');
+  const isTablet = Math.min(width, height) >= 600;
+  
+  if (isTablet) {
+    // On tablets, use vertical space efficiently
+    const availableHeight = height * 0.7;
+    const availableWidth = width * 0.95;
+    const maxSize = Math.min(availableHeight, availableWidth) / N;
+    return Math.floor(Math.min(maxSize, 60));
+  }
+  
+  // On mobile, use 95% of screen width
+  const availableWidth = width * 0.95;
+  const cellSize = availableWidth / N;
+  return Math.floor(cellSize);
+}
+
 const TOTAL_BERRIES_REQUIRED = 27;
 
 type Screen = "start" | "game";
@@ -104,6 +122,7 @@ type PuzzleSource = "generated" | "pool";
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>("start");
+  const [cellSize, setCellSize] = useState(getResponsiveCellSize());
 
   const [puzzle, setPuzzle] = useState<Puzzle | null>(null);
   const [puzzleSource, setPuzzleSource] = useState<PuzzleSource>("generated");
@@ -412,16 +431,22 @@ export default function App() {
   }
 
   function getCellBorderStyle(r: number, c: number) {
-    const top = r === 0 ? 2 : r % 3 === 0 ? 2 : 1;
-    const left = c === 0 ? 2 : c % 3 === 0 ? 2 : 1;
-    const right = c === N - 1 ? 2 : (c + 1) % 3 === 0 ? 2 : 1;
-    const bottom = r === N - 1 ? 2 : (r + 1) % 3 === 0 ? 2 : 1;
+    // Black borders (width 2) for outer edges and 3x3 block boundaries
+    // Grey borders (width 1) for individual cells
+    const isTopBlockEdge = r === 0 || r % 3 === 0;
+    const isLeftBlockEdge = c === 0 || c % 3 === 0;
+    const isRightBlockEdge = c === N - 1 || (c + 1) % 3 === 0;
+    const isBottomBlockEdge = r === N - 1 || (r + 1) % 3 === 0;
 
     return {
-      borderTopWidth: top,
-      borderLeftWidth: left,
-      borderRightWidth: right,
-      borderBottomWidth: bottom,
+      borderTopWidth: isTopBlockEdge ? 2 : 1,
+      borderLeftWidth: isLeftBlockEdge ? 2 : 1,
+      borderRightWidth: isRightBlockEdge ? 2 : 1,
+      borderBottomWidth: isBottomBlockEdge ? 2 : 1,
+      borderTopColor: isTopBlockEdge ? '#000' : '#999',
+      borderLeftColor: isLeftBlockEdge ? '#000' : '#999',
+      borderRightColor: isRightBlockEdge ? '#000' : '#999',
+      borderBottomColor: isBottomBlockEdge ? '#000' : '#999',
     };
   }
 
@@ -438,7 +463,11 @@ export default function App() {
 
     let text = "";
 
-    const cellStyles: StyleProp<ViewStyle>[] = [styles.cell, getCellBorderStyle(r, c)];
+    const cellStyles: StyleProp<ViewStyle>[] = [
+      styles.cell,
+      { width: cellSize, height: cellSize },
+      getCellBorderStyle(r, c)
+    ];
     const textStyles: StyleProp<TextStyle>[] = [styles.cellText];
 
     if (showSolution) {
@@ -612,6 +641,14 @@ export default function App() {
     };
   }, []);
   
+  // Update cell size on window resize
+  useEffect(() => {
+    const subscription = Dimensions.addEventListener('change', () => {
+      setCellSize(getResponsiveCellSize());
+    });
+
+    return () => subscription?.remove();
+  }, []);
   
   const startDisabled = isGenerating;
   const poolDisabled = !poolHasRemaining || startDisabled;
@@ -845,9 +882,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
   },
   cell: {
-    width: CELL_SIZE,
-    height: CELL_SIZE,
-    borderColor: "#ccc",
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: "#fff",
