@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { makePuzzle, solveCount, computeClues, N } from "../blueberryCore";
+import { makePuzzle, solveCount, computeClues, N, Puzzle } from "../blueberryCore";
 import { cluesToMap, countClues } from "./fixtures";
 
 describe("makePuzzle()", () => {
@@ -57,6 +57,7 @@ describe("makePuzzle()", () => {
     }
 
     const countClues = (puz: Puzzle) => {
+      
       let total = 0;
       for (let r = 0; r < N; r++) {
         for (let c = 0; c < N; c++) {
