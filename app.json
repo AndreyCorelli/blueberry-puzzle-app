@@ -32,6 +32,9 @@
         "projectId": "9a35d32e-5d3d-4e55-aa34-951083805334"
       }
     },
-    "owner": "andrey.sitaev"
+    "owner": "andrey.sitaev",
+    "plugins": [
+      "expo-localization"
+    ]
   }
 }

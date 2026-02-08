@@ -1,0 +1,89 @@
+{
+  "app": {
+    "title": "Blueberry Puzzle",
+    "titleWithIndex": "Blueberry Puzzle {{index}}",
+    "subtitle": "{{count}} Beeren pro Reihe, Spalte und Block",
+    "preparingGame": "Spiel wird vorbereitet…",
+    "howToPlay": "Spielanleitung",
+    "difficulty": {
+      "easy": "Leicht",
+      "medium": "Mittel",
+      "hard": "Schwer"
+    }
+  },
+
+  "start": {
+    "chooseHowToStart": "Wähle, wie du ein neues Spiel starten möchtest:",
+    "poolProgress": "Pool-Fortschritt ({{poolName}}): {{used}} / {{total}} verwendet",
+    "playNextWithLeft": "Nächstes Rätsel spielen ({{left}} übrig)",
+    "playNextPoolUnavailable": "Nächstes Rätsel spielen (Pool nicht verfügbar)",
+    "randomFromPoolWithLeft": "Zufälliges Rätsel (aus dem Pool) ({{left}} übrig)",
+    "randomFromPoolUnavailable": "Zufälliges Rätsel (aus dem Pool) (Pool nicht verfügbar)",
+    "generateNewForDifficulty": "Neues Rätsel erzeugen ({{difficulty}})",
+    "resetPoolProgress": "Pool-Fortschritt zurücksetzen",
+    "tipPoolInstant": "Tipp: Pool-Rätsel starten sofort. Der Generator kann auf manchen Geräten etwas länger dauern."
+  },
+
+  "game": {
+    "check": "Prüfen",
+    "undo": "Rückgängig",
+    "redo": "Wiederholen",
+    "clear": "Löschen",
+    "showSolution": "Lösung anzeigen",
+    "hideSolution": "Lösung ausblenden",
+    "newGame": "Neues Spiel"
+  },
+
+  "status": {
+    "poolExhausted": "Pool ist erschöpft. Keine neuen Rätsel mehr vorhanden.",
+    "poolPuzzleUnsolvable": "Pool-Rätsel Nr. {{index}} konnte nicht gelöst werden. Wird übersprungen.",
+    "loadNextPoolFailed": "Fehler beim Laden des nächsten Pool-Rätsels: {{msg}}",
+    "loadRandomPoolFailed": "Fehler beim Laden eines zufälligen Pool-Rätsels: {{msg}}",
+    "correctSolved": "✅ Richtig! Rätsel gelöst.",
+    "notSolvedYet": "❌ Noch nicht gelöst.",
+    "poolProgressReset": "Pool-Fortschritt zurückgesetzt ({{poolId}}).",
+    "resetPoolFailed": "Fehler beim Zurücksetzen des Pool-Fortschritts: {{msg}}",
+    "poolLoadFailed": "Pool konnte nicht geladen werden; Pool-Buttons sind deaktiviert. ({{msg}})"
+  },
+
+  "help": {
+    "back": "← Zurück",
+    "backToStart": "← Zurück zum Start",
+    "headerTitle": "Spielanleitung",
+
+    "h1Title": "Blueberry Puzzle",
+    "intro": "Die Regeln sind einfach: genau drei Beeren pro 3×3-Block, pro Reihe und pro Spalte. Eine Zahl zeigt an, wie viele Beeren sich in den benachbarten Feldern befinden – einschließlich der diagonalen Felder.",
+
+    "section1": {
+      "title": "Zahlen lesen",
+      "p1": "Eine Zahl ist ein Hinweis. Sie zählt die Beeren in den 8 umliegenden Feldern (oben, unten, links, rechts und diagonal). Das Hinweisfeld selbst enthält niemals eine Beere.",
+      "caption1": "Beispiel 1. Verwende den Hinweis, um über die benachbarten Felder zu schließen.",
+      "p2": {
+        "part1": "Hier zeigt die Zahl",
+        "part2": "an, dass 3 der 4 benachbarten Felder Beeren enthalten. Von den zwei rot umrandeten Feldern kann jedoch höchstens eines eine Beere enthalten – andernfalls gäbe es zu viele Beeren neben dem Feld mit der Zahl",
+        "part3": "Darum können wir sicher sagen, dass beide unteren Nachbarfelder der Zahl",
+        "part4": "Beeren enthalten."
+      }
+    },
+
+    "section2": {
+      "title": "Lokale Einschränkungen kombinieren",
+      "p1": "Die meisten Züge entstehen durch das Kombinieren mehrerer Hinweise. Wenn ein Hinweis einschränkt, wo Beeren liegen können, erzwingt er oft Beeren in benachbarten Feldern.",
+      "caption1": "Beispiel 2. Kombiniere zwei nahe beieinanderliegende Hinweise.",
+      "p2": "Die unterste Reihe enthält bereits zwei Beeren. Gleichzeitig muss der rechte 3×3-Block in derselben unteren Reihe noch eine weitere Beere enthalten. Das bedeutet, dass alle drei Beeren der unteren Reihe bereits feststehen. Daher kann die unterste Reihe des mittleren 3×3-Blocks keine Beeren enthalten. Folglich können die beiden markierten Felder als leer markiert werden."
+    },
+
+    "controls": {
+      "title": "Steuerung",
+      "berry": "Beere",
+      "bullet1": {
+        "part1": "• Tippe auf ein leeres Feld: wechselt zwischen",
+        "part2": "→",
+        "part3": "→ leer."
+      },
+      "bullet2": "• Rückgängig / Wiederholen: macht Züge rückgängig oder stellt sie wieder her.",
+      "bullet3": "• Löschen: entfernt alle deine Markierungen.",
+      "bullet4": "• Prüfen: aktiviert, wenn du genau {{total}} Beeren platziert hast."
+    }
+  }
+}

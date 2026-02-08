@@ -1,0 +1,89 @@
+{
+  "app": {
+    "title": "Blueberry Puzzle",
+    "titleWithIndex": "Blueberry Puzzle {{index}}",
+    "subtitle": "{{count}} berries per row, column & block",
+    "preparingGame": "Preparing game…",
+    "howToPlay": "How to play",
+    "difficulty": {
+      "easy": "Easy",
+      "medium": "Medium",
+      "hard": "Hard"
+    }
+  },
+
+  "start": {
+    "chooseHowToStart": "Choose how to start a new game:",
+    "poolProgress": "Pool progress ({{poolName}}): {{used}} / {{total}} used",
+    "playNextWithLeft": "Play next puzzle ({{left}} left)",
+    "playNextPoolUnavailable": "Play next puzzle (pool unavailable)",
+    "randomFromPoolWithLeft": "Random puzzle (from pool) ({{left}} left)",
+    "randomFromPoolUnavailable": "Random puzzle (from pool) (pool unavailable)",
+    "generateNewForDifficulty": "Generate new puzzle ({{difficulty}})",
+    "resetPoolProgress": "Reset pool progress",
+    "tipPoolInstant": "Tip: pool puzzles start instantly. Generator may take a while on some devices."
+  },
+
+  "game": {
+    "check": "Check",
+    "undo": "Undo",
+    "redo": "Redo",
+    "clear": "Clear",
+    "showSolution": "Show solution",
+    "hideSolution": "Hide solution",
+    "newGame": "New game"
+  },
+
+  "status": {
+    "poolExhausted": "Pool exhausted. No new puzzles left.",
+    "poolPuzzleUnsolvable": "Pool puzzle #{{index}} could not be solved. Skipping.",
+    "loadNextPoolFailed": "Failed to load next pool puzzle: {{msg}}",
+    "loadRandomPoolFailed": "Failed to load random pool puzzle: {{msg}}",
+    "correctSolved": "✅ Correct! Puzzle solved.",
+    "notSolvedYet": "❌ Not solved yet.",
+    "poolProgressReset": "Pool progress reset ({{poolId}}).",
+    "resetPoolFailed": "Failed to reset pool progress: {{msg}}",
+    "poolLoadFailed": "Pool load failed; pool buttons disabled. ({{msg}})"
+  },
+
+  "help": {
+    "back": "← Back",
+    "backToStart": "← Back to start",
+    "headerTitle": "How to play",
+
+    "h1Title": "Blueberry Puzzle",
+    "intro": "The rules of the game are simple: exactly three berries per 3×3 square, per line, and per column. A number shows how many berries are neighbouring the cell, including diagonal cells.",
+
+    "section1": {
+      "title": "Reading the numbers",
+      "p1": "A number is a clue. It counts berries in the 8 surrounding cells (up, down, left, right, and diagonals). The clue cell itself never contains a berry.",
+      "caption1": "Example 1. Use the clue to reason about the neighbouring cells.",
+      "p2": {
+        "part1": "Here the number",
+        "part2": "tells us that 3 out of the 4 neighbouring cells contain berries. However, out of the two cells outlined with red, at most one can have a berry — otherwise there would be too many berries next to the cell with number",
+        "part3": "on it. Thus we can surely say that both the bottom neighbours of the number",
+        "part4": "contain berries."
+      }
+    },
+
+    "section2": {
+      "title": "Combine local constraints",
+      "p1": "Most moves come from combining several clues. When one clue restricts where berries can go, it often forces berries elsewhere nearby.",
+      "caption1": "Example 2. Combine two nearby clues.",
+      "p2": "The bottom row already contains two berries. At the same time, the right 3×3 square must contain one additional berry in that same bottom row. This means that all three berries for the bottom row are already accounted for. Therefore, the bottom row of the middle 3×3 square cannot contain any berries. As a result, the two highlighted cells can be marked as empty."
+    },
+
+    "controls": {
+      "title": "Controls",
+      "berry": "berry",
+      "bullet1": {
+        "part1": "• Tap an empty cell: cycles",
+        "part2": "→",
+        "part3": "→ empty."
+      },
+      "bullet2": "• Undo / Redo: revert or re-apply moves.",
+      "bullet3": "• Clear: removes all your marks.",
+      "bullet4": "• Check: enabled when you placed exactly {{total}} berries."
+    }
+  }
+}

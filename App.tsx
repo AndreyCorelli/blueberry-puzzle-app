@@ -14,6 +14,8 @@ import {
   ViewStyle,
   Dimensions,
 } from "react-native";
+import { useTranslation } from "react-i18next";
+
 import { makePuzzle, N, solveOneFromClueGrid } from "./src/core/blueberryCore";
 import type { Puzzle } from "./src/core/blueberryCore";
 import {
@@ -33,6 +35,9 @@ import type { PuzzlePoolV1, PoolId, PuzzleSource } from "./src/core/gameSave";
 import type { PlayerCellState, Violations } from "./src/core/rulesCheck";
 
 import HelpScreen from "./src/screens/HelpScreen";
+import { initI18n } from "./src/i18n";
+
+initI18n();
 
 // Pools JSON are bundled into the app
 const RAW_POOLS: Record<PoolId, any> = {
@@ -121,13 +126,15 @@ const TOTAL_BERRIES_REQUIRED = 27;
 
 type Screen = "start" | "game" | "help";
 
-function poolTitle(id: PoolId): string {
-  if (id === "easy") return "Easy";
-  if (id === "medium") return "Medium";
-  return "Hard";
+function poolTitleKey(id: PoolId): string {
+  if (id === "easy") return "app.difficulty.easy";
+  if (id === "medium") return "app.difficulty.medium";
+  return "app.difficulty.hard";
 }
 
 export default function App() {
+  const { t } = useTranslation();
+
   const [screen, setScreen] = useState<Screen>("start");
   const [cellSize, setCellSize] = useState(getResponsiveCellSize());
 
@@ -200,8 +207,8 @@ export default function App() {
 
   const titleText =
     puzzleSource === "pool" && currentPoolIndex !== null
-      ? `Blueberry Puzzle ${currentPoolIndex + 1}`
-      : "Blueberry Puzzle";
+      ? t("app.titleWithIndex", { index: currentPoolIndex + 1 })
+      : t("app.title");
 
   function resetGameState() {
     setPuzzle(null);
@@ -270,7 +277,7 @@ export default function App() {
       const idx = getNextNotLoadedIndex(pool, progress);
 
       if (idx === null) {
-        setStatus("Pool exhausted. No new puzzles left.");
+        setStatus(t("status.poolExhausted"));
         setStatusOk(null);
         return;
       }
@@ -280,7 +287,7 @@ export default function App() {
 
       const solution = solveOneFromClueGrid(puzzleClues);
       if (!solution) {
-        setStatus(`Pool puzzle #${idx} could not be solved. Skipping.`);
+        setStatus(t("status.poolPuzzleUnsolvable", { index: idx }));
         setStatusOk(false);
         await markPoolIndexLoaded(poolId, pool, idx);
         const p2 = await loadPoolProgress(poolId, pool);
@@ -297,7 +304,7 @@ export default function App() {
       setPoolLoadedCount((prev) => ({ ...prev, [poolId]: updated.loaded.length }));
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      setStatus(`Failed to load next pool puzzle: ${msg}`);
+      setStatus(t("status.loadNextPoolFailed", { msg }));
       setStatusOk(false);
     } finally {
       setIsGenerating(false);
@@ -315,7 +322,7 @@ export default function App() {
       const idx = getRandomNotLoadedIndex(pool, progress);
 
       if (idx === null) {
-        setStatus("Pool exhausted. No new puzzles left.");
+        setStatus(t("status.poolExhausted"));
         setStatusOk(null);
         return;
       }
@@ -325,7 +332,7 @@ export default function App() {
 
       const solution = solveOneFromClueGrid(puzzleClues);
       if (!solution) {
-        setStatus(`Pool puzzle #${idx} could not be solved. Skipping.`);
+        setStatus(t("status.poolPuzzleUnsolvable", { index: idx }));
         setStatusOk(false);
         await markPoolIndexLoaded(poolId, pool, idx);
         const p2 = await loadPoolProgress(poolId, pool);
@@ -342,7 +349,7 @@ export default function App() {
       setPoolLoadedCount((prev) => ({ ...prev, [poolId]: updated.loaded.length }));
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      setStatus(`Failed to load random pool puzzle: ${msg}`);
+      setStatus(t("status.loadRandomPoolFailed", { msg }));
       setStatusOk(false);
     } finally {
       setIsGenerating(false);
@@ -463,10 +470,10 @@ export default function App() {
         if (p) void markPoolIndexSolved(activePoolIdForCurrentPuzzle, p, currentPoolIndex);
       }
       setIsSolved(true);
-      setStatus("✅ Correct! Puzzle solved.");
+      setStatus(t("status.correctSolved"));
       setStatusOk(true);
     } else {
-      setStatus("❌ Not solved yet.");
+      setStatus(t("status.notSolvedYet"));
       setStatusOk(false);
     }
   }
@@ -562,11 +569,11 @@ export default function App() {
       // Update UI immediately
       setPoolLoadedCount((prev) => ({ ...prev, [poolId]: 0 }));
 
-      setStatus(`Pool progress reset (${poolId}).`);
+      setStatus(t("status.poolProgressReset", { poolId }));
       setStatusOk(true);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      setStatus(`Failed to reset pool progress: ${msg}`);
+      setStatus(t("status.resetPoolFailed", { msg }));
       setStatusOk(false);
     }
   }
@@ -724,6 +731,8 @@ export default function App() {
   const startDisabled = isGenerating;
   const poolDisabled = !poolHasRemaining || startDisabled || !!poolError;
 
+  const subtitleText = t("app.subtitle", { count: 3 });
+
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="dark-content" />
@@ -733,12 +742,12 @@ export default function App() {
       ) : (
         <View style={styles.container}>
           <Text style={styles.title}>{titleText}</Text>
-          <Text style={styles.subtitle}>3 berries per row, column & block</Text>
+          <Text style={styles.subtitle}>{subtitleText}</Text>
 
           {isGenerating && (
             <View style={styles.generating}>
               <ActivityIndicator size="small" />
-              <Text style={styles.generatingText}>Preparing game…</Text>
+              <Text style={styles.generatingText}>{t("app.preparingGame")}</Text>
             </View>
           )}
 
@@ -751,7 +760,7 @@ export default function App() {
                   onPress={handleHowToPlay}
                   disabled={startDisabled}
                 >
-                  <Text style={styles.helpButtonText}>How to play</Text>
+                  <Text style={styles.helpButtonText}>{t("app.howToPlay")}</Text>
                 </Pressable>
 
                 {/* Tabs */}
@@ -768,7 +777,7 @@ export default function App() {
                       disabled={startDisabled}
                     >
                       <Text style={[styles.tabText, poolId === id && styles.tabTextActive]}>
-                        {poolTitle(id)}
+                        {t(poolTitleKey(id))}
                       </Text>
                     </Pressable>
                   ))}
@@ -776,15 +785,19 @@ export default function App() {
 
                 {poolError && (
                   <Text style={[styles.status, styles.statusError]}>
-                    Pool load failed; pool buttons disabled. ({poolError})
+                    {t("status.poolLoadFailed", { msg: poolError })}
                   </Text>
                 )}
 
-                <Text style={styles.startHint}>Choose how to start a new game:</Text>
+                <Text style={styles.startHint}>{t("start.chooseHowToStart")}</Text>
 
                 {pool && (
                   <Text style={styles.startNote}>
-                    Pool progress ({poolTitle(poolId)}): {poolProgressLoadedCount} / {poolSize} used
+                    {t("start.poolProgress", {
+                      poolName: t(poolTitleKey(poolId)),
+                      used: poolProgressLoadedCount,
+                      total: poolSize,
+                    })}
                   </Text>
                 )}
 
@@ -795,7 +808,9 @@ export default function App() {
                   disabled={poolDisabled}
                 >
                   <Text style={styles.buttonText}>
-                    Play next puzzle {pool ? `(${poolRemaining} left)` : "(pool unavailable)"}
+                    {pool
+                      ? t("start.playNextWithLeft", { left: poolRemaining })
+                      : t("start.playNextPoolUnavailable")}
                   </Text>
                 </Pressable>
 
@@ -805,7 +820,9 @@ export default function App() {
                   disabled={poolDisabled}
                 >
                   <Text style={styles.buttonText}>
-                    Random puzzle (from pool) {pool ? `(${poolRemaining} left)` : "(pool unavailable)"}
+                    {pool
+                      ? t("start.randomFromPoolWithLeft", { left: poolRemaining })
+                      : t("start.randomFromPoolUnavailable")}
                   </Text>
                 </Pressable>
 
@@ -815,7 +832,9 @@ export default function App() {
                   onPress={() => generatePuzzleForDifficulty(poolId)}
                   disabled={startDisabled}
                 >
-                  <Text style={styles.buttonText}>Generate new puzzle ({poolTitle(poolId)})</Text>
+                  <Text style={styles.buttonText}>
+                    {t("start.generateNewForDifficulty", { difficulty: t(poolTitleKey(poolId)) })}
+                  </Text>
                 </Pressable>
 
                 {/* Pool admin */}
@@ -825,13 +844,11 @@ export default function App() {
                     disabled={startDisabled}
                     style={[styles.linkWrap, startDisabled && styles.buttonDisabled]}
                   >
-                    <Text style={styles.linkText}>Reset pool progress</Text>
+                    <Text style={styles.linkText}>{t("start.resetPoolProgress")}</Text>
                   </Pressable>
                 )}
 
-                <Text style={styles.startNote}>
-                  Tip: pool puzzles start instantly. Generator may take a while on some devices.
-                </Text>
+                <Text style={styles.startNote}>{t("start.tipPoolInstant")}</Text>
               </View>
 
               {status !== "" && (
@@ -865,7 +882,7 @@ export default function App() {
                     onPress={checkSolution}
                     disabled={isGenerating}
                   >
-                    <Text style={styles.buttonText}>Check</Text>
+                    <Text style={styles.buttonText}>{t("game.check")}</Text>
                   </Pressable>
                 </Animated.View>
               </View>
@@ -877,28 +894,30 @@ export default function App() {
                   onPress={undo}
                   disabled={!canUndo || isGenerating}
                 >
-                  <Text style={styles.buttonText}>Undo</Text>
+                  <Text style={styles.buttonText}>{t("game.undo")}</Text>
                 </Pressable>
                 <Pressable
                   style={[styles.button, (!canRedo || isGenerating) && styles.buttonDisabled]}
                   onPress={redo}
                   disabled={!canRedo || isGenerating}
                 >
-                  <Text style={styles.buttonText}>Redo</Text>
+                  <Text style={styles.buttonText}>{t("game.redo")}</Text>
                 </Pressable>
                 <Pressable
                   style={[styles.button, isGenerating && styles.buttonDisabled]}
                   onPress={clearBoard}
                   disabled={isGenerating}
                 >
-                  <Text style={styles.buttonText}>Clear</Text>
+                  <Text style={styles.buttonText}>{t("game.clear")}</Text>
                 </Pressable>
               </View>
 
               {/* Show / Hide solution */}
               {!isSolved && (
                 <Pressable style={styles.toggle} onPress={toggleShowSolution} disabled={isGenerating}>
-                  <Text style={styles.toggleText}>{showSolution ? "Hide solution" : "Show solution"}</Text>
+                  <Text style={styles.toggleText}>
+                    {showSolution ? t("game.hideSolution") : t("game.showSolution")}
+                  </Text>
                 </Pressable>
               )}
 
@@ -908,7 +927,7 @@ export default function App() {
                 onPress={newGame}
                 disabled={isGenerating}
               >
-                <Text style={styles.buttonText}>New game</Text>
+                <Text style={styles.buttonText}>{t("game.newGame")}</Text>
               </Pressable>
 
               {status !== "" && (

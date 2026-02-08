@@ -1,0 +1,89 @@
+{
+  "app": {
+    "title": "Rompecabezas Blueberry",
+    "titleWithIndex": "Rompecabezas Blueberry {{index}}",
+    "subtitle": "{{count}} bayas por fila, columna y bloque",
+    "preparingGame": "Preparando partida…",
+    "howToPlay": "Cómo jugar",
+    "difficulty": {
+      "easy": "Fácil",
+      "medium": "Media",
+      "hard": "Difícil"
+    }
+  },
+
+  "start": {
+    "chooseHowToStart": "Elige cómo empezar una nueva partida:",
+    "poolProgress": "Progreso del conjunto ({{poolName}}): {{used}} / {{total}} usadas",
+    "playNextWithLeft": "Jugar el siguiente puzle (quedan {{left}})",
+    "playNextPoolUnavailable": "Jugar el siguiente puzle (conjunto no disponible)",
+    "randomFromPoolWithLeft": "Puzle aleatorio (del conjunto) (quedan {{left}})",
+    "randomFromPoolUnavailable": "Puzle aleatorio (del conjunto) (conjunto no disponible)",
+    "generateNewForDifficulty": "Generar nuevo puzle ({{difficulty}})",
+    "resetPoolProgress": "Restablecer progreso del conjunto",
+    "tipPoolInstant": "Consejo: los puzles del conjunto se cargan al instante. El generador puede tardar un poco en algunos dispositivos."
+  },
+
+  "game": {
+    "check": "Comprobar",
+    "undo": "Deshacer",
+    "redo": "Rehacer",
+    "clear": "Limpiar",
+    "showSolution": "Mostrar solución",
+    "hideSolution": "Ocultar solución",
+    "newGame": "Nueva partida"
+  },
+
+  "status": {
+    "poolExhausted": "Conjunto agotado. No quedan puzles nuevos.",
+    "poolPuzzleUnsolvable": "El puzle del conjunto n.º {{index}} no se pudo resolver. Se omite.",
+    "loadNextPoolFailed": "Error al cargar el siguiente puzle del conjunto: {{msg}}",
+    "loadRandomPoolFailed": "Error al cargar un puzle aleatorio del conjunto: {{msg}}",
+    "correctSolved": "✅ ¡Correcto! Puzle resuelto.",
+    "notSolvedYet": "❌ Aún no está resuelto.",
+    "poolProgressReset": "Progreso del conjunto restablecido ({{poolId}}).",
+    "resetPoolFailed": "Error al restablecer el progreso del conjunto: {{msg}}",
+    "poolLoadFailed": "Error al cargar el conjunto; los botones del conjunto están desactivados. ({{msg}})"
+  },
+
+  "help": {
+    "back": "← Volver",
+    "backToStart": "← Volver al inicio",
+    "headerTitle": "Cómo jugar",
+
+    "h1Title": "Rompecabezas Blueberry",
+    "intro": "Las reglas del juego son simples: exactamente tres bayas por cada bloque de 3×3, por cada fila y por cada columna. Un número indica cuántas bayas hay en las celdas vecinas, incluidas las diagonales.",
+
+    "section1": {
+      "title": "Leer los números",
+      "p1": "Un número es una pista. Cuenta las bayas en las 8 celdas que lo rodean (arriba, abajo, izquierda, derecha y diagonales). La celda con la pista nunca contiene una baya.",
+      "caption1": "Ejemplo 1. Usa la pista para razonar sobre las celdas vecinas.",
+      "p2": {
+        "part1": "Aquí el número",
+        "part2": "nos dice que 3 de las 4 celdas vecinas contienen bayas. Sin embargo, de las dos celdas marcadas en rojo, como máximo una puede contener una baya; de lo contrario habría demasiadas bayas junto a la celda con el número",
+        "part3": "en ella. Por lo tanto, podemos afirmar con seguridad que ambas celdas inferiores vecinas del número",
+        "part4": "contienen bayas."
+      }
+    },
+
+    "section2": {
+      "title": "Combinar restricciones locales",
+      "p1": "La mayoría de los movimientos surgen al combinar varias pistas. Cuando una pista restringe dónde pueden colocarse las bayas, a menudo obliga a colocar bayas en otras celdas cercanas.",
+      "caption1": "Ejemplo 2. Combina dos pistas cercanas.",
+      "p2": "La fila inferior ya contiene dos bayas. Al mismo tiempo, el bloque 3×3 de la derecha debe contener una baya adicional en esa misma fila inferior. Esto significa que las tres bayas de la fila inferior ya están determinadas. Por lo tanto, la fila inferior del bloque 3×3 central no puede contener ninguna baya. Como resultado, las dos celdas resaltadas pueden marcarse como vacías."
+    },
+
+    "controls": {
+      "title": "Controles",
+      "berry": "baya",
+      "bullet1": {
+        "part1": "• Toca una celda vacía: alterna",
+        "part2": "→",
+        "part3": "→ vacío."
+      },
+      "bullet2": "• Deshacer / Rehacer: revierte o vuelve a aplicar movimientos.",
+      "bullet3": "• Limpiar: elimina todas tus marcas.",
+      "bullet4": "• Comprobar: se activa cuando has colocado exactamente {{total}} bayas."
+    }
+  }
+}

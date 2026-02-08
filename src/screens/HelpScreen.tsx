@@ -8,6 +8,7 @@ import {
   ScrollView,
   Image,
 } from "react-native";
+import { useTranslation } from "react-i18next";
 
 type Props = {
   onBack: () => void;
@@ -19,14 +20,16 @@ const HELP_IMAGES = [
 ];
 
 export default function HelpScreen({ onBack }: Props) {
+  const { t } = useTranslation();
+
   return (
     <SafeAreaView style={styles.safe}>
       {/* Header */}
       <View style={styles.header}>
         <Pressable style={styles.backButton} onPress={onBack}>
-          <Text style={styles.backButtonText}>← Back</Text>
+          <Text style={styles.backButtonText}>{t("help.back")}</Text>
         </Pressable>
-        <Text style={styles.headerTitle}>How to play</Text>
+        <Text style={styles.headerTitle}>{t("help.headerTitle")}</Text>
         {/* Spacer to balance layout */}
         <View style={styles.headerRightSpacer} />
       </View>
@@ -37,76 +40,57 @@ export default function HelpScreen({ onBack }: Props) {
         showsVerticalScrollIndicator
       >
         {/* Intro */}
-        <Text style={styles.h1}>Blueberry Puzzle</Text>
-        <Text style={styles.p}>
-          The rules of the game are simple: exactly three berries per 3×3 square,
-          per line, and per column. A number shows how many berries are
-          neighbouring the cell, including diagonal cells.
-        </Text>
+        <Text style={styles.h1}>{t("help.h1Title")}</Text>
+        <Text style={styles.p}>{t("help.intro")}</Text>
 
         <View style={styles.hr} />
 
         {/* Section 1 */}
-        <Text style={styles.h2}>Reading the numbers</Text>
-        <Text style={styles.p}>
-          A number is a clue. It counts berries in the 8 surrounding cells (up,
-          down, left, right, and diagonals). The clue cell itself never contains
-          a berry.
-        </Text>
+        <Text style={styles.h2}>{t("help.section1.title")}</Text>
+        <Text style={styles.p}>{t("help.section1.p1")}</Text>
 
         <View style={styles.figure}>
           <Image source={HELP_IMAGES[0]} style={styles.image} resizeMode="contain" />
-          <Text style={styles.caption}>
-            Example 1. Use the clue to reason about the neighbouring cells.
-          </Text>
+          <Text style={styles.caption}>{t("help.section1.caption1")}</Text>
         </View>
 
+        {/* Keep the bold-number inline formatting without stuffing HTML into translations */}
         <Text style={styles.p}>
-          Here the number <Text style={styles.bold}>3</Text> tells us that 3 out
-          of the 4 neighbouring cells contain berries. However, out of the two
-          cells outlined with red, at most one can have a berry — otherwise there
-          would be too many berries next to the cell with number{" "}
-          <Text style={styles.bold}>1</Text> on it. Thus we can surely say that
-          both the bottom neighbours of the number{" "}
-          <Text style={styles.bold}>3</Text> contain berries.
+          {t("help.section1.p2.part1")} <Text style={styles.bold}>3</Text>{" "}
+          {t("help.section1.p2.part2")} <Text style={styles.bold}>1</Text>{" "}
+          {t("help.section1.p2.part3")} <Text style={styles.bold}>3</Text>{" "}
+          {t("help.section1.p2.part4")}
         </Text>
 
         <View style={styles.hr} />
 
         {/* Section 2 */}
-        <Text style={styles.h2}>Combine local constraints</Text>
-        <Text style={styles.p}>
-          Most moves come from combining several clues. When one clue restricts
-          where berries can go, it often forces berries elsewhere nearby.
-        </Text>
+        <Text style={styles.h2}>{t("help.section2.title")}</Text>
+        <Text style={styles.p}>{t("help.section2.p1")}</Text>
 
         <View style={styles.figure}>
           <Image source={HELP_IMAGES[1]} style={styles.image} resizeMode="contain" />
-          <Text style={styles.caption}>Example 2. Combine two nearby clues.</Text>
+          <Text style={styles.caption}>{t("help.section2.caption1")}</Text>
         </View>
 
-        <Text style={styles.p}>
-          The bottom row already contains two berries.
-          At the same time, the right 3×3 square must contain one additional berry in that same bottom row.
-          This means that all three berries for the bottom row are already accounted for.
-          Therefore, the bottom row of the middle 3×3 square cannot contain any berries.
-          As a result, the two highlighted cells can be marked as empty.
-        </Text>
-        
+        <Text style={styles.p}>{t("help.section2.p2")}</Text>
+
         <View style={styles.hr} />
 
         {/* Controls */}
-        <Text style={styles.h2}>Controls</Text>
+        <Text style={styles.h2}>{t("help.controls.title")}</Text>
 
         <View style={styles.bullets}>
           <Text style={styles.bullet}>
-            • Tap an empty cell: cycles <Text style={styles.bold}>berry</Text> →{" "}
-            <Text style={styles.bold}>X</Text> → empty.
+            {t("help.controls.bullet1.part1")} <Text style={styles.bold}>{t("help.controls.berry")}</Text>{" "}
+            {t("help.controls.bullet1.part2")} <Text style={styles.bold}>X</Text>{" "}
+            {t("help.controls.bullet1.part3")}
           </Text>
-          <Text style={styles.bullet}>• Undo / Redo: revert or re-apply moves.</Text>
-          <Text style={styles.bullet}>• Clear: removes all your marks.</Text>
+
+          <Text style={styles.bullet}>{t("help.controls.bullet2")}</Text>
+          <Text style={styles.bullet}>{t("help.controls.bullet3")}</Text>
           <Text style={styles.bullet}>
-            • Check: enabled when you placed exactly 27 berries.
+            {t("help.controls.bullet4", { total: 27 })}
           </Text>
         </View>
 
@@ -114,7 +98,7 @@ export default function HelpScreen({ onBack }: Props) {
 
         {/* Bottom Back button (obvious way out even after long scroll) */}
         <Pressable style={styles.backButtonBottom} onPress={onBack}>
-          <Text style={styles.backButtonBottomText}>← Back to start</Text>
+          <Text style={styles.backButtonBottomText}>{t("help.backToStart")}</Text>
         </Pressable>
 
         <View style={styles.footerSpace} />
