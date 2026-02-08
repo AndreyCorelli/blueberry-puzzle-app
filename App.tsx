@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
-  SafeAreaView,
   View,
   Text,
   Pressable,
@@ -13,8 +12,12 @@ import {
   TextStyle,
   ViewStyle,
   Dimensions,
+  Modal,
+  Platform,
 } from "react-native";
+import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTranslation } from "react-i18next";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { makePuzzle, N, solveOneFromClueGrid } from "./src/core/blueberryCore";
 import type { Puzzle } from "./src/core/blueberryCore";
@@ -35,7 +38,15 @@ import type { PuzzlePoolV1, PoolId, PuzzleSource } from "./src/core/gameSave";
 import type { PlayerCellState, Violations } from "./src/core/rulesCheck";
 
 import HelpScreen from "./src/screens/HelpScreen";
-import { initI18n } from "./src/i18n";
+import {
+  initI18n,
+  isSupportedLang,
+  setAppLanguage,
+  resetToSystemLanguage,
+  getCurrentLanguage,
+  type SupportedLang,
+  I18N_STORAGE_KEY_LANGUAGE,
+} from "./src/i18n";
 
 initI18n();
 
@@ -132,8 +143,27 @@ function poolTitleKey(id: PoolId): string {
   return "app.difficulty.hard";
 }
 
-export default function App() {
+type LangChoice = SupportedLang | "system";
+
+const LANG_OPTIONS: Array<{
+  key: LangChoice;
+  label: string;
+  badge: string;
+}> = [
+  { key: "system", label: "System (Auto)", badge: "🌐" },
+  { key: "en", label: "English", badge: "EN" },
+  { key: "es", label: "Español", badge: "ES" },
+  { key: "de", label: "Deutsch", badge: "DE" },
+];
+
+function langLabel(choice: LangChoice): string {
+  const opt = LANG_OPTIONS.find((o) => o.key === choice);
+  return opt ? `${opt.badge} ${opt.label}` : "🌐 System (Auto)";
+}
+
+function RootApp() {
   const { t } = useTranslation();
+  const insets = useSafeAreaInsets();
 
   const [screen, setScreen] = useState<Screen>("start");
   const [cellSize, setCellSize] = useState(getResponsiveCellSize());
@@ -209,6 +239,56 @@ export default function App() {
     puzzleSource === "pool" && currentPoolIndex !== null
       ? t("app.titleWithIndex", { index: currentPoolIndex + 1 })
       : t("app.title");
+
+  // --- language selector ---
+  const [langChoice, setLangChoice] = useState<LangChoice>("system");
+  const [langModalOpen, setLangModalOpen] = useState(false);
+  const [langReady, setLangReady] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+
+    (async () => {
+      try {
+        const saved = await AsyncStorage.getItem(I18N_STORAGE_KEY_LANGUAGE);
+        if (!alive) return;
+
+        if (saved && isSupportedLang(saved)) {
+          await setAppLanguage(saved);
+          setLangChoice(saved);
+        } else {
+          setLangChoice("system");
+        }
+      } catch {
+        // ignore storage issues, just keep system language
+        setLangChoice("system");
+      } finally {
+        if (alive) setLangReady(true);
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  async function applyLanguage(choice: LangChoice) {
+    setLangModalOpen(false);
+
+    try {
+      if (choice === "system") {
+        await AsyncStorage.removeItem(I18N_STORAGE_KEY_LANGUAGE);
+        await resetToSystemLanguage();
+        setLangChoice("system");
+      } else {
+        await setAppLanguage(choice);
+        await AsyncStorage.setItem(I18N_STORAGE_KEY_LANGUAGE, choice);
+        setLangChoice(choice);
+      }
+    } catch {
+      // ignore; keep UI responsive
+    }
+  }
 
   function resetGameState() {
     setPuzzle(null);
@@ -380,8 +460,9 @@ export default function App() {
 
       const current = nextBoard[r][c];
       let nextVal: PlayerCellState;
-      if (current === 0) nextVal = 1;
-      else if (current === 1) nextVal = -1;
+      // empty → X → berry → empty
+      if (current === 0) nextVal = -1;
+      else if (current === -1) nextVal = 1;
       else nextVal = 0;
       nextBoard[r][c] = nextVal;
 
@@ -728,13 +809,13 @@ export default function App() {
     return () => subscription?.remove();
   }, []);
 
-  const startDisabled = isGenerating;
+  const startDisabled = isGenerating || !langReady; // avoid language flicker
   const poolDisabled = !poolHasRemaining || startDisabled || !!poolError;
 
   const subtitleText = t("app.subtitle", { count: 3 });
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <View style={[styles.safe, { paddingTop: insets.top }]}>
       <StatusBar barStyle="dark-content" />
 
       {screen === "help" ? (
@@ -743,6 +824,21 @@ export default function App() {
         <View style={styles.container}>
           <Text style={styles.title}>{titleText}</Text>
           <Text style={styles.subtitle}>{subtitleText}</Text>
+
+          {/* Language selector (start screen only) */}
+          {screen === "start" && (
+            <View style={styles.langRow}>
+              <Pressable
+                onPress={() => setLangModalOpen(true)}
+                style={[styles.langButton, startDisabled && styles.buttonDisabled]}
+                disabled={startDisabled}
+                hitSlop={10}
+              >
+                <Text style={styles.langButtonText}>{langLabel(langChoice)}</Text>
+                <Text style={styles.langChevron}>▾</Text>
+              </Pressable>
+            </View>
+          )}
 
           {isGenerating && (
             <View style={styles.generating}>
@@ -944,7 +1040,58 @@ export default function App() {
           )}
         </View>
       )}
-    </SafeAreaView>
+
+      {/* Language modal */}
+      <Modal
+        visible={langModalOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setLangModalOpen(false)}
+      >
+        <Pressable style={styles.modalBackdrop} onPress={() => setLangModalOpen(false)}>
+          <View />
+        </Pressable>
+
+        <View style={[styles.modalCard, { paddingBottom: (insets.bottom || 0) + 12 }]}>
+          <Text style={styles.modalTitle}>Language</Text>
+          <Text style={styles.modalSub}>
+            {langChoice === "system"
+              ? `Currently: ${langLabel("system")} • (${langLabel(getCurrentLanguage())})`
+              : `Currently: ${langLabel(langChoice)}`}
+          </Text>
+
+          <View style={styles.modalList}>
+            {LANG_OPTIONS.map((opt) => {
+              const selected = langChoice === opt.key;
+              return (
+                <Pressable
+                  key={opt.key}
+                  onPress={() => void applyLanguage(opt.key)}
+                  style={[styles.modalRow, selected && styles.modalRowSelected]}
+                >
+                  <Text style={[styles.modalRowText, selected && styles.modalRowTextSelected]}>
+                    {opt.badge} {opt.label}
+                  </Text>
+                  {selected && <Text style={styles.modalCheck}>✓</Text>}
+                </Pressable>
+              );
+            })}
+          </View>
+
+          <Pressable style={styles.modalClose} onPress={() => setLangModalOpen(false)}>
+            <Text style={styles.modalCloseText}>Close</Text>
+          </Pressable>
+        </View>
+      </Modal>
+    </View>
+  );
+}
+
+export default function App() {
+  return (
+    <SafeAreaProvider>
+      <RootApp />
+    </SafeAreaProvider>
   );
 }
 
@@ -967,7 +1114,35 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 12,
     color: "#555",
-    marginBottom: 12,
+    marginBottom: 10,
+  },
+
+  langRow: {
+    width: "100%",
+    maxWidth: 420,
+    alignItems: "flex-end",
+    marginBottom: 8,
+  },
+  langButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    backgroundColor: "#fff",
+  },
+  langButtonText: {
+    color: "#111827",
+    fontWeight: "700",
+    fontSize: 13,
+  },
+  langChevron: {
+    color: "#6b7280",
+    fontSize: 14,
+    marginLeft: 6,
   },
 
   startWrap: {
@@ -1064,6 +1239,8 @@ const styles = StyleSheet.create({
   },
   cellPlayerEmpty: {
     color: "#9ca3af",
+    fontSize: 20,
+    fontWeight: "700",
   },
   cellViolation: {
     borderColor: "#dc2626",
@@ -1153,5 +1330,87 @@ const styles = StyleSheet.create({
     color: "#2563eb",
     textDecorationLine: "underline",
     fontSize: 12,
+  },
+
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.35)",
+  },
+  modalCard: {
+    position: "absolute",
+    left: 12,
+    right: 12,
+    bottom: 12,
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingTop: 14,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    ...Platform.select({
+      ios: {
+        shadowColor: "#000",
+        shadowOpacity: 0.18,
+        shadowRadius: 12,
+        shadowOffset: { width: 0, height: 6 },
+      },
+      android: {
+        elevation: 8,
+      },
+    }),
+  },
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: "#111827",
+  },
+  modalSub: {
+    marginTop: 4,
+    fontSize: 12,
+    color: "#6b7280",
+  },
+  modalList: {
+    marginTop: 12,
+    borderRadius: 12,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+  },
+  modalRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    backgroundColor: "#fff",
+    borderTopWidth: 1,
+    borderTopColor: "#e5e7eb",
+  },
+  modalRowSelected: {
+    backgroundColor: "#eff6ff",
+  },
+  modalRowText: {
+    fontSize: 14,
+    color: "#111827",
+    fontWeight: "700",
+  },
+  modalRowTextSelected: {
+    color: "#1d4ed8",
+  },
+  modalCheck: {
+    fontSize: 16,
+    fontWeight: "900",
+    color: "#1d4ed8",
+  },
+  modalClose: {
+    marginTop: 12,
+    marginBottom: 8,
+    alignSelf: "flex-end",
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  modalCloseText: {
+    color: "#2563eb",
+    fontWeight: "800",
   },
 });

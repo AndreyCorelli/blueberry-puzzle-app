@@ -1,14 +1,15 @@
 import React from "react";
 import {
-  SafeAreaView,
   View,
   Text,
   Pressable,
   StyleSheet,
   ScrollView,
   Image,
+  Platform,
 } from "react-native";
 import { useTranslation } from "react-i18next";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 type Props = {
   onBack: () => void;
@@ -21,23 +22,43 @@ const HELP_IMAGES = [
 
 export default function HelpScreen({ onBack }: Props) {
   const { t } = useTranslation();
+  const insets = useSafeAreaInsets();
+
+  // Tuning constants (feel free to adjust once and forget)
+  const HEADER_TOP_EXTRA = 6;
+  const FOOTER_BOTTOM_EXTRA = 10;
 
   return (
-    <SafeAreaView style={styles.safe}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Pressable style={styles.backButton} onPress={onBack}>
+    <View style={styles.root}>
+      {/* Header (sticky, safe at top) */}
+      <View style={[styles.header, { paddingTop: insets.top + HEADER_TOP_EXTRA }]}>
+        <Pressable style={styles.backButton} onPress={onBack} hitSlop={10}>
           <Text style={styles.backButtonText}>{t("help.back")}</Text>
         </Pressable>
-        <Text style={styles.headerTitle}>{t("help.headerTitle")}</Text>
+
+        <Text style={styles.headerTitle} numberOfLines={1} ellipsizeMode="tail">
+          {t("help.headerTitle")}
+        </Text>
+
         {/* Spacer to balance layout */}
         <View style={styles.headerRightSpacer} />
       </View>
 
+      {/* Body: scrollable content */}
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          {
+            // leave room so the fixed footer never overlaps content
+            paddingBottom: (insets.bottom || 0) + 24 + 52,
+          },
+        ]}
         showsVerticalScrollIndicator
+        // helps iOS feel nicer
+        contentInsetAdjustmentBehavior="never"
+        // helps Android with some OEM quirks
+        overScrollMode={Platform.OS === "android" ? "never" : "auto"}
       >
         {/* Intro */}
         <Text style={styles.h1}>{t("help.h1Title")}</Text>
@@ -82,33 +103,37 @@ export default function HelpScreen({ onBack }: Props) {
 
         <View style={styles.bullets}>
           <Text style={styles.bullet}>
-            {t("help.controls.bullet1.part1")} <Text style={styles.bold}>{t("help.controls.berry")}</Text>{" "}
+            {t("help.controls.bullet1.part1")}{" "}
+            <Text style={styles.bold}>{t("help.controls.berry")}</Text>{" "}
             {t("help.controls.bullet1.part2")} <Text style={styles.bold}>X</Text>{" "}
             {t("help.controls.bullet1.part3")}
           </Text>
 
           <Text style={styles.bullet}>{t("help.controls.bullet2")}</Text>
           <Text style={styles.bullet}>{t("help.controls.bullet3")}</Text>
-          <Text style={styles.bullet}>
-            {t("help.controls.bullet4", { total: 27 })}
-          </Text>
+          <Text style={styles.bullet}>{t("help.controls.bullet4", { total: 27 })}</Text>
         </View>
+      </ScrollView>
 
-        <View style={styles.footerSpace} />
-
-        {/* Bottom Back button (obvious way out even after long scroll) */}
+      {/* Fixed footer (safe at bottom) */}
+      <View
+        style={[
+          styles.footer,
+          {
+            paddingBottom: (insets.bottom || 0) + FOOTER_BOTTOM_EXTRA,
+          },
+        ]}
+      >
         <Pressable style={styles.backButtonBottom} onPress={onBack}>
           <Text style={styles.backButtonBottomText}>{t("help.backToStart")}</Text>
         </Pressable>
-
-        <View style={styles.footerSpace} />
-      </ScrollView>
-    </SafeAreaView>
+      </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: {
+  root: {
     flex: 1,
     backgroundColor: "#f5f5f5",
   },
@@ -117,7 +142,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingBottom: 10,
     borderBottomWidth: 1,
     borderBottomColor: "#e5e7eb",
     backgroundColor: "#f5f5f5",
@@ -140,6 +165,7 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: "#111827",
     fontSize: 16,
+    paddingHorizontal: 10,
   },
   headerRightSpacer: {
     width: 70, // roughly matches back button width to keep title centered
@@ -151,7 +177,6 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 14,
     paddingTop: 14,
-    paddingBottom: 24,
   },
 
   h1: {
@@ -203,20 +228,6 @@ const styles = StyleSheet.create({
     color: "#6b7280",
   },
 
-  callout: {
-    backgroundColor: "#fff",
-    borderRadius: 14,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-    marginBottom: 10,
-  },
-  calloutText: {
-    fontSize: 14,
-    lineHeight: 20,
-    color: "#111827",
-  },
-
   bullets: {
     marginTop: 4,
     marginBottom: 10,
@@ -228,20 +239,23 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
 
+  footer: {
+    borderTopWidth: 1,
+    borderTopColor: "#e5e7eb",
+    backgroundColor: "#f5f5f5",
+    paddingHorizontal: 14,
+    paddingTop: 10,
+  },
+
   backButtonBottom: {
     alignSelf: "stretch",
     backgroundColor: "#2563eb",
     paddingVertical: 12,
     borderRadius: 12,
     alignItems: "center",
-    marginTop: 8,
   },
   backButtonBottomText: {
     color: "#fff",
     fontWeight: "800",
-  },
-
-  footerSpace: {
-    height: 14,
   },
 });

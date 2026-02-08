@@ -230,8 +230,3 @@ blueberry-trio-app/
 ```
 
 The puzzle rules and generation logic are all encapsulated in src/core/blueberryCore.ts, making it easy to reuse or test independently.
-
-## TODO 
-
-1) The "How to.." screen spans too high and too low at the same time, overlapping the phone's controls.
-2) After tapping a cell mark it as empty first and only then as occupied, as there are more empty cells.
