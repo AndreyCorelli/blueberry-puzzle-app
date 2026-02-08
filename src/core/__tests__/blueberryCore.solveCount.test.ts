@@ -113,18 +113,41 @@ describe("solveOneFromClueGrid()", () => {
     expect(boardsEqual(solved as Board, board)).toBe(true);
   });
 
-  it("solves makePuzzle() output (both modes) and matches puzzle.solution", () => {
-    for (const dense of [false, true] as const) {
-      const puzzle = makePuzzle({ dense });
+  it("solves makePuzzle() output (different options) and matches puzzle.solution", () => {
+    const cases = [
+      { extraClues: 0, nonEmptyBlocks: false },
+      { extraClues: 3, nonEmptyBlocks: false },
+      { extraClues: 0, nonEmptyBlocks: true },
+      { extraClues: 3, nonEmptyBlocks: true },
+    ] as const;
 
-      // sanity: generator says it's unique
-      const sols = solveCount(cluesToMap(puzzle.puzzleClues), 2);
-      expect(sols).toBe(1);
+    // deterministic RNG for tests
+    function mulberry32(seed: number): () => number {
+      let t = seed >>> 0;
+      return () => {
+        t += 0x6d2b79f5;
+        let x = Math.imul(t ^ (t >>> 15), 1 | t);
+        x ^= x + Math.imul(x ^ (x >>> 7), 61 | x);
+        return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
+      };
+    }
 
-      // solving from clues should yield the same solution board
-      const solved = solveOneFromClueGrid(puzzle.puzzleClues);
-      expect(solved).not.toBeNull();
-      expect(boardsEqual(solved as Board, puzzle.solution)).toBe(true);
+    // a few seeds to catch randomness-related regressions but stay stable
+    const seeds = [1, 2, 3, 42, 1337];
+
+    for (const opts of cases) {
+      for (const seed of seeds) {
+        const puzzle = makePuzzle({ ...opts, rng: mulberry32(seed) });
+
+        // sanity: generator output must be uniquely solvable
+        const sols = solveCount(cluesToMap(puzzle.puzzleClues), 2);
+        expect(sols).toBe(1);
+
+        // solving from clues should yield the same solution board
+        const solved = solveOneFromClueGrid(puzzle.puzzleClues);
+        expect(solved).not.toBeNull();
+        expect(boardsEqual(solved as Board, puzzle.solution)).toBe(true);
+      }
     }
   });
 });

@@ -16,7 +16,6 @@ import {
 } from "react-native";
 import { makePuzzle, N, solveOneFromClueGrid } from "./src/core/blueberryCore";
 import type { Puzzle } from "./src/core/blueberryCore";
-import { computeClueAreaViolations } from "./src/core/clueCheck";
 import {
   scheduleSave,
   clearSavedGame,
@@ -28,15 +27,19 @@ import {
   resetPoolProgress,
   loadSavedGame,
 } from "./src/core/gameSave";
-import {
-  computeViolations
-} from "./src/core/rulesCheck"
+import { computeViolations } from "./src/core/rulesCheck";
 
-import type { PuzzlePoolV1 } from "./src/core/gameSave";
+import type { PuzzlePoolV1, PoolId, PuzzleSource } from "./src/core/gameSave";
 import type { PlayerCellState, Violations } from "./src/core/rulesCheck";
 
-// Pool JSON is bundled into the app
-const RAW_POOL_JSON = require("./assets/pool/puzzlePool.v1.json");
+import HelpScreen from "./src/screens/HelpScreen";
+
+// Pools JSON are bundled into the app
+const RAW_POOLS: Record<PoolId, any> = {
+  easy: require("./assets/pool/puzzlePool.easy.v1.json"),
+  medium: require("./assets/pool/puzzlePool.medium.v1.json"),
+  hard: require("./assets/pool/puzzlePool.hard.v1.json"),
+};
 
 function isInt(x: unknown): x is number {
   return typeof x === "number" && Number.isInteger(x);
@@ -75,7 +78,6 @@ function validatePoolOrThrow(x: unknown): PuzzlePoolV1 {
   return o as PuzzlePoolV1;
 }
 
-
 function decodeClues81ToGrid(clues81: number[]): (number | null)[][] {
   if (clues81.length !== N * N) {
     throw new Error(`clues81 length mismatch: got ${clues81.length}, expected ${N * N}`);
@@ -98,9 +100,9 @@ function createEmptyPlayerBoard(): PlayerCellState[][] {
 }
 
 function getResponsiveCellSize(): number {
-  const { width, height } = Dimensions.get('window');
+  const { width, height } = Dimensions.get("window");
   const isTablet = Math.min(width, height) >= 600;
-  
+
   if (isTablet) {
     // On tablets, use vertical space efficiently
     const availableHeight = height * 0.7;
@@ -108,7 +110,7 @@ function getResponsiveCellSize(): number {
     const maxSize = Math.min(availableHeight, availableWidth) / N;
     return Math.floor(Math.min(maxSize, 60));
   }
-  
+
   // On mobile, use 95% of screen width
   const availableWidth = width * 0.95;
   const cellSize = availableWidth / N;
@@ -117,8 +119,13 @@ function getResponsiveCellSize(): number {
 
 const TOTAL_BERRIES_REQUIRED = 27;
 
-type Screen = "start" | "game";
-type PuzzleSource = "generated" | "pool";
+type Screen = "start" | "game" | "help";
+
+function poolTitle(id: PoolId): string {
+  if (id === "easy") return "Easy";
+  if (id === "medium") return "Medium";
+  return "Hard";
+}
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>("start");
@@ -146,31 +153,55 @@ export default function App() {
   const canUndo = history.length > 0;
   const canRedo = future.length > 0;
 
-  const totalBerries = playerBoard.reduce(
-    (acc, row) => acc + row.filter((v) => v === 1).length,
-    0,
-  );
+  const totalBerries = playerBoard.reduce((acc, row) => acc + row.filter((v) => v === 1).length, 0);
 
   const readyToCheck = !!puzzle && !showSolution && totalBerries === TOTAL_BERRIES_REQUIRED;
-
   const checkPulse = useRef(new Animated.Value(1)).current;
 
-  const [pool, setPool] = useState<PuzzlePoolV1 | null>(null);
-  const [poolError, setPoolError] = useState<string | null>(null);
+  // --- pools ---
+  const [poolId, setPoolId] = useState<PoolId>("easy");
 
-  const poolSize = pool?.puzzles.length ?? 0;  
+  const [pools, setPools] = useState<Record<PoolId, PuzzlePoolV1 | null>>({
+    easy: null,
+    medium: null,
+    hard: null,
+  });
+
+  const [poolErrors, setPoolErrors] = useState<Record<PoolId, string | null>>({
+    easy: null,
+    medium: null,
+    hard: null,
+  });
+
+  const pool = pools[poolId];
+  const poolError = poolErrors[poolId];
+
+  const poolSize = pool?.puzzles.length ?? 0;
 
   const poolAvailable = useMemo(() => !!pool && poolSize > 0, [pool, poolSize]);
-  const [currentPoolIndex, setCurrentPoolIndex] = useState<number | null>(null);
-  const [poolProgressLoadedCount, setPoolProgressLoadedCount] = useState<number>(0);
-  const poolRemaining = pool ? Math.max(0, poolSize - poolProgressLoadedCount) : 0;
-  const poolHasRemaining = poolAvailable && poolRemaining > 0; 
-  const [isSolved, setIsSolved] = useState(false); 
-  const titleText =
-  puzzleSource === "pool" && currentPoolIndex !== null
-    ? `Blueberry Puzzle ${currentPoolIndex + 1}`
-    : "Blueberry Puzzle";
 
+  // progress counts per pool
+  const [poolLoadedCount, setPoolLoadedCount] = useState<Record<PoolId, number>>({
+    easy: 0,
+    medium: 0,
+    hard: 0,
+  });
+
+  const poolProgressLoadedCount = poolLoadedCount[poolId];
+  const poolRemaining = pool ? Math.max(0, poolSize - poolProgressLoadedCount) : 0;
+  const poolHasRemaining = poolAvailable && poolRemaining > 0;
+
+  const [currentPoolIndex, setCurrentPoolIndex] = useState<number | null>(null);
+  const [activePoolIdForCurrentPuzzle, setActivePoolIdForCurrentPuzzle] = useState<PoolId | null>(
+    null,
+  );
+
+  const [isSolved, setIsSolved] = useState(false);
+
+  const titleText =
+    puzzleSource === "pool" && currentPoolIndex !== null
+      ? `Blueberry Puzzle ${currentPoolIndex + 1}`
+      : "Blueberry Puzzle";
 
   function resetGameState() {
     setPuzzle(null);
@@ -203,54 +234,67 @@ export default function App() {
     setScreen("game");
   }
 
-  function generatePuzzle(dense: boolean) {
+  // Generator params per pool:
+  // - extraClues = how many extra clue cells to ADD after minimization.
+  // - nonEmptyBlocks = ensure each 3x3 block has >= 1 clue.
+  function genParamsForPool(id: PoolId): { extraClues: number; nonEmptyBlocks: boolean } {
+    if (id === "easy") return { extraClues: 3, nonEmptyBlocks: true };
+    if (id === "medium") return { extraClues: 1, nonEmptyBlocks: true };
+    return { extraClues: 0, nonEmptyBlocks: false };
+  }
+
+  function generatePuzzleForDifficulty(id: PoolId) {
     setIsGenerating(true);
     setStatus("");
     setStatusOk(null);
     setShowSolution(false);
 
     setTimeout(() => {
-      const p = makePuzzle({ dense });
+      const params = genParamsForPool(id);
+      const p = makePuzzle({ extraClues: params.extraClues, nonEmptyBlocks: params.nonEmptyBlocks });
       setCurrentPoolIndex(null);
+      setActivePoolIdForCurrentPuzzle(null);
       startGameWithPuzzle(p, "generated");
       setIsGenerating(false);
     }, 0);
   }
 
   async function loadNextPuzzleFromPool() {
-    if (!poolAvailable) return;
+    if (!poolAvailable || !pool) return;
     setIsGenerating(true);
     setStatus("");
     setStatusOk(null);
-  
+
     try {
-      const progress = await loadPoolProgress(pool!);
-      const idx = getNextNotLoadedIndex(pool!, progress);
-  
+      const progress = await loadPoolProgress(poolId, pool);
+      const idx = getNextNotLoadedIndex(pool, progress);
+
       if (idx === null) {
         setStatus("Pool exhausted. No new puzzles left.");
         setStatusOk(null);
         return;
       }
-  
-      const entry = pool!.puzzles[idx];
+
+      const entry = pool.puzzles[idx];
       const puzzleClues = decodeClues81ToGrid(entry.clues81);
-  
+
       const solution = solveOneFromClueGrid(puzzleClues);
       if (!solution) {
         setStatus(`Pool puzzle #${idx} could not be solved. Skipping.`);
         setStatusOk(false);
-        // mark it loaded so you don't get stuck hitting it repeatedly
-        await markPoolIndexLoaded(pool!, idx);
+        await markPoolIndexLoaded(poolId, pool, idx);
+        const p2 = await loadPoolProgress(poolId, pool);
+        setPoolLoadedCount((prev) => ({ ...prev, [poolId]: p2.loaded.length }));
         return;
       }
-  
-      const p: Puzzle = { puzzleClues, solution };
-      startGameWithPuzzle(p, "pool");
+
+      const pz: Puzzle = { puzzleClues, solution };
+      startGameWithPuzzle(pz, "pool");
       setCurrentPoolIndex(idx);
-  
-      const updated = await markPoolIndexLoaded(pool!, idx);
-      setPoolProgressLoadedCount(updated.loaded.length);
+      setActivePoolIdForCurrentPuzzle(poolId);
+
+      const updated = await markPoolIndexLoaded(poolId, pool, idx);
+      setPoolLoadedCount((prev) => ({ ...prev, [poolId]: updated.loaded.length }));
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setStatus(`Failed to load next pool puzzle: ${msg}`);
@@ -259,41 +303,43 @@ export default function App() {
       setIsGenerating(false);
     }
   }
-  
 
   async function loadRandomPuzzleFromPool() {
-    if (!poolAvailable) return;
+    if (!poolAvailable || !pool) return;
     setIsGenerating(true);
     setStatus("");
     setStatusOk(null);
-  
+
     try {
-      const progress = await loadPoolProgress(pool!);
-      const idx = getRandomNotLoadedIndex(pool!, progress);
-  
+      const progress = await loadPoolProgress(poolId, pool);
+      const idx = getRandomNotLoadedIndex(pool, progress);
+
       if (idx === null) {
         setStatus("Pool exhausted. No new puzzles left.");
         setStatusOk(null);
         return;
       }
-  
-      const entry = pool!.puzzles[idx];
+
+      const entry = pool.puzzles[idx];
       const puzzleClues = decodeClues81ToGrid(entry.clues81);
-  
+
       const solution = solveOneFromClueGrid(puzzleClues);
       if (!solution) {
         setStatus(`Pool puzzle #${idx} could not be solved. Skipping.`);
         setStatusOk(false);
-        await markPoolIndexLoaded(pool!, idx);
+        await markPoolIndexLoaded(poolId, pool, idx);
+        const p2 = await loadPoolProgress(poolId, pool);
+        setPoolLoadedCount((prev) => ({ ...prev, [poolId]: p2.loaded.length }));
         return;
       }
-  
-      const p: Puzzle = { puzzleClues, solution };
-      startGameWithPuzzle(p, "pool");
+
+      const pz: Puzzle = { puzzleClues, solution };
+      startGameWithPuzzle(pz, "pool");
       setCurrentPoolIndex(idx);
-  
-      const updated = await markPoolIndexLoaded(pool!, idx);
-      setPoolProgressLoadedCount(updated.loaded.length);
+      setActivePoolIdForCurrentPuzzle(poolId);
+
+      const updated = await markPoolIndexLoaded(poolId, pool, idx);
+      setPoolLoadedCount((prev) => ({ ...prev, [poolId]: updated.loaded.length }));
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setStatus(`Failed to load random pool puzzle: ${msg}`);
@@ -302,10 +348,10 @@ export default function App() {
       setIsGenerating(false);
     }
   }
-  
 
   function newGame() {
     setCurrentPoolIndex(null);
+    setActivePoolIdForCurrentPuzzle(null);
     resetGameState();
     setIsSolved(false);
     void clearSavedGame();
@@ -412,8 +458,9 @@ export default function App() {
     setViolations(computeViolations(playerBoard, puzzle));
 
     if (allMatch) {
-      if (puzzleSource === "pool" && currentPoolIndex !== null && pool) {
-        void markPoolIndexSolved(pool, currentPoolIndex);
+      if (puzzleSource === "pool" && currentPoolIndex !== null && activePoolIdForCurrentPuzzle) {
+        const p = pools[activePoolIdForCurrentPuzzle];
+        if (p) void markPoolIndexSolved(activePoolIdForCurrentPuzzle, p, currentPoolIndex);
       }
       setIsSolved(true);
       setStatus("✅ Correct! Puzzle solved.");
@@ -443,10 +490,10 @@ export default function App() {
       borderLeftWidth: isLeftBlockEdge ? 2 : 1,
       borderRightWidth: isRightBlockEdge ? 2 : 1,
       borderBottomWidth: isBottomBlockEdge ? 2 : 1,
-      borderTopColor: isTopBlockEdge ? '#000' : '#999',
-      borderLeftColor: isLeftBlockEdge ? '#000' : '#999',
-      borderRightColor: isRightBlockEdge ? '#000' : '#999',
-      borderBottomColor: isBottomBlockEdge ? '#000' : '#999',
+      borderTopColor: isTopBlockEdge ? "#000" : "#999",
+      borderLeftColor: isLeftBlockEdge ? "#000" : "#999",
+      borderRightColor: isRightBlockEdge ? "#000" : "#999",
+      borderBottomColor: isBottomBlockEdge ? "#000" : "#999",
     };
   }
 
@@ -466,7 +513,7 @@ export default function App() {
     const cellStyles: StyleProp<ViewStyle>[] = [
       styles.cell,
       { width: cellSize, height: cellSize },
-      getCellBorderStyle(r, c)
+      getCellBorderStyle(r, c),
     ];
     const textStyles: StyleProp<TextStyle>[] = [styles.cellText];
 
@@ -499,34 +546,35 @@ export default function App() {
     }
 
     return (
-      <Pressable
-        key={`${r}-${c}`}
-        style={cellStyles}
-        onPress={() => handleCellPress(r, c)}
-      >
+      <Pressable key={`${r}-${c}`} style={cellStyles} onPress={() => handleCellPress(r, c)}>
         <Text style={textStyles}>{text}</Text>
       </Pressable>
     );
   }
 
   async function handleResetPoolProgress() {
-    if (!pool) return;
     setStatus("");
     setStatusOk(null);
-  
+
     try {
-      await resetPoolProgress(pool);
-  
+      await resetPoolProgress(poolId);
+
       // Update UI immediately
-      setPoolProgressLoadedCount(0);
-  
-      setStatus("Pool progress reset.");
+      setPoolLoadedCount((prev) => ({ ...prev, [poolId]: 0 }));
+
+      setStatus(`Pool progress reset (${poolId}).`);
       setStatusOk(true);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setStatus(`Failed to reset pool progress: ${msg}`);
       setStatusOk(false);
     }
+  }
+
+  function handleHowToPlay() {
+    setStatus("");
+    setStatusOk(null);
+    setScreen("help");
   }
 
   // Pulse animation for Check button
@@ -568,7 +616,7 @@ export default function App() {
   useEffect(() => {
     if (screen !== "game") return;
     if (!puzzle) return;
-  
+
     scheduleSave({
       v: 1,
       savedAt: Date.now(),
@@ -577,45 +625,61 @@ export default function App() {
       history,
       future,
       useDense: false, // keep for compatibility
-  
-      // NEW meta
+
       puzzleSource,
       poolIndex: puzzleSource === "pool" ? currentPoolIndex : null,
+      poolId: puzzleSource === "pool" ? activePoolIdForCurrentPuzzle : null,
     });
-  }, [screen, puzzle, playerBoard, history, future, puzzleSource, currentPoolIndex]);
+  }, [
+    screen,
+    puzzle,
+    playerBoard,
+    history,
+    future,
+    puzzleSource,
+    currentPoolIndex,
+    activePoolIdForCurrentPuzzle,
+  ]);
 
-  // Load + validate pool once
+  // Load + validate pools once
   useEffect(() => {
-    try {
-      const validated = validatePoolOrThrow(RAW_POOL_JSON);
-      setPool(validated);
-      setPoolError(null);
-      console.log(`Pool loaded: ${validated.puzzles.length} puzzles`);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      setPool(null);
-      setPoolError(msg);
-      console.warn("Failed to load puzzle pool:", msg);
-    }
+    (["easy", "medium", "hard"] as const).forEach((id) => {
+      try {
+        const validated = validatePoolOrThrow(RAW_POOLS[id]);
+        setPools((prev) => ({ ...prev, [id]: validated }));
+        setPoolErrors((prev) => ({ ...prev, [id]: null }));
+        console.log(`Pool loaded (${id}): ${validated.puzzles.length} puzzles`);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        setPools((prev) => ({ ...prev, [id]: null }));
+        setPoolErrors((prev) => ({ ...prev, [id]: msg }));
+        console.warn(`Failed to load pool (${id}):`, msg);
+      }
+    });
   }, []);
 
+  // Load progress for each pool (per key)
   useEffect(() => {
-    if (!pool) return;
     (async () => {
-      const progress = await loadPoolProgress(pool);
-      setPoolProgressLoadedCount(progress.loaded.length);
+      for (const id of ["easy", "medium", "hard"] as const) {
+        const p = pools[id];
+        if (!p) continue;
+        const progress = await loadPoolProgress(id, p);
+        setPoolLoadedCount((prev) => ({ ...prev, [id]: progress.loaded.length }));
+      }
     })();
-  }, [pool]);
+  }, [pools.easy, pools.medium, pools.hard]);
 
+  // Restore last game (if any)
   useEffect(() => {
     let alive = true;
-  
+
     (async () => {
       try {
         const saved = await loadSavedGame(N);
         if (!alive) return;
         if (!saved) return;
-  
+
         setPuzzle(saved.puzzle);
         setPlayerBoard(saved.playerBoard);
         setHistory(saved.history);
@@ -623,214 +687,244 @@ export default function App() {
         setShowSolution(false);
         setStatus("");
         setStatusOk(null);
-  
+
         // restore meta (safe defaults)
         const src = saved.puzzleSource ?? "generated";
         setPuzzleSource(src);
+
+        const restoredPoolId =
+          saved.poolId === "easy" || saved.poolId === "medium" || saved.poolId === "hard"
+            ? saved.poolId
+            : null;
+
+        setActivePoolIdForCurrentPuzzle(src === "pool" ? restoredPoolId : null);
         setCurrentPoolIndex(src === "pool" ? (saved.poolIndex ?? null) : null);
-  
+
         setViolations(computeViolations(saved.playerBoard, saved.puzzle));
-        setScreen("game"); // <-- this is the key thing you lost
+        setScreen("game");
       } catch {
         // ignore corrupted saves
       }
     })();
-  
+
     return () => {
       alive = false;
     };
   }, []);
-  
+
   // Update cell size on window resize
   useEffect(() => {
-    const subscription = Dimensions.addEventListener('change', () => {
+    const subscription = Dimensions.addEventListener("change", () => {
       setCellSize(getResponsiveCellSize());
     });
 
     return () => subscription?.remove();
   }, []);
-  
+
   const startDisabled = isGenerating;
-  const poolDisabled = !poolHasRemaining || startDisabled;
+  const poolDisabled = !poolHasRemaining || startDisabled || !!poolError;
 
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="dark-content" />
 
-      <View style={styles.container}>
-        <Text style={styles.title}>{titleText}</Text>
-        <Text style={styles.subtitle}>3 berries per row, column & block</Text>
+      {screen === "help" ? (
+        <HelpScreen onBack={() => setScreen("start")} />
+      ) : (
+        <View style={styles.container}>
+          <Text style={styles.title}>{titleText}</Text>
+          <Text style={styles.subtitle}>3 berries per row, column & block</Text>
 
-        {isGenerating && (
-          <View style={styles.generating}>
-            <ActivityIndicator size="small" />
-            <Text style={styles.generatingText}>Preparing game…</Text>
-          </View>
-        )}
+          {isGenerating && (
+            <View style={styles.generating}>
+              <ActivityIndicator size="small" />
+              <Text style={styles.generatingText}>Preparing game…</Text>
+            </View>
+          )}
 
-        {poolError && (
-          <Text style={[styles.status, styles.statusError]}>
-            Pool load failed; pool buttons disabled. ({poolError})
-          </Text>
-        )}
-
-        {screen === "start" && (
-          <>
-            <View style={styles.startWrap}>
-              <Text style={styles.startHint}>Choose how to start a new game:</Text>
-              {pool && (
-                <Text style={styles.startNote}>
-                  Pool progress: {poolProgressLoadedCount} / {poolSize} used
-                </Text>
-              )}
-
-              <Pressable
-                style={[styles.buttonWide, poolDisabled && styles.buttonDisabled]}
-                onPress={loadNextPuzzleFromPool}
-                disabled={poolDisabled}
-              >
-                <Text style={styles.buttonText}>
-                  Next puzzle {pool ? `(${poolRemaining} left)` : "(pool unavailable)"}
-                </Text>
-              </Pressable>
-
-              {poolAvailable && (
+          {screen === "start" && (
+            <>
+              <View style={styles.startWrap}>
+                {/* Help */}
                 <Pressable
-                  onPress={handleResetPoolProgress}
+                  style={[styles.helpButton, startDisabled && styles.buttonDisabled]}
+                  onPress={handleHowToPlay}
                   disabled={startDisabled}
-                  style={[styles.linkWrap, startDisabled && styles.buttonDisabled]}
                 >
-                  <Text style={styles.linkText}>Reset pool progress</Text>
+                  <Text style={styles.helpButtonText}>How to play</Text>
                 </Pressable>
-              )}
 
-              <Pressable
-                style={[styles.buttonWide, poolDisabled && styles.buttonDisabled]}
-                onPress={loadRandomPuzzleFromPool}
-                disabled={poolDisabled}
-              >
-                <Text style={styles.buttonText}>
-                  Random puzzle {pool ? `(${poolRemaining} left)` : "(pool unavailable)"}
-                </Text>
-              </Pressable>
-
-              <Pressable
-                style={[styles.buttonWide, startDisabled && styles.buttonDisabled]}
-                onPress={() => generatePuzzle(false)}
-                disabled={startDisabled}
-              >
-                <Text style={styles.buttonText}>Generate puzzle</Text>
-              </Pressable>
-
-              <Pressable
-                style={[styles.buttonWide, startDisabled && styles.buttonDisabled]}
-                onPress={() => generatePuzzle(true)}
-                disabled={startDisabled}
-              >
-                <Text style={styles.buttonText}>Generate puzzle (extra clues)</Text>
-              </Pressable>
-
-              <Text style={styles.startNote}>
-                Tip: pool puzzles start instantly. Generator may take a while on some devices.
-              </Text>
-            </View>
-
-            {status !== "" && (
-              <Text
-                style={[
-                  styles.status,
-                  statusOk === true ? styles.statusOk : statusOk === false ? styles.statusError : null,
-                ]}
-              >
-                {status}
-              </Text>
-            )}
-          </>
-        )}
-
-        {screen === "game" && puzzle && (
-          <>
-            <View style={styles.grid}>
-              {Array.from({ length: N }, (_, r) => (
-                <View key={r} style={styles.row}>
-                  {Array.from({ length: N }, (_, c) => renderCell(r, c))}
+                {/* Tabs */}
+                <View style={styles.tabsRow}>
+                  {(["easy", "medium", "hard"] as const).map((id) => (
+                    <Pressable
+                      key={id}
+                      onPress={() => setPoolId(id)}
+                      style={[
+                        styles.tab,
+                        poolId === id && styles.tabActive,
+                        startDisabled && styles.tabDisabled,
+                      ]}
+                      disabled={startDisabled}
+                    >
+                      <Text style={[styles.tabText, poolId === id && styles.tabTextActive]}>
+                        {poolTitle(id)}
+                      </Text>
+                    </Pressable>
+                  ))}
                 </View>
-              ))}
-            </View>
 
-            {/* Row: Check */}
-            <View style={styles.checkWrap}>
-              <Animated.View style={{ transform: [{ scale: checkPulse }] }}>
+                {poolError && (
+                  <Text style={[styles.status, styles.statusError]}>
+                    Pool load failed; pool buttons disabled. ({poolError})
+                  </Text>
+                )}
+
+                <Text style={styles.startHint}>Choose how to start a new game:</Text>
+
+                {pool && (
+                  <Text style={styles.startNote}>
+                    Pool progress ({poolTitle(poolId)}): {poolProgressLoadedCount} / {poolSize} used
+                  </Text>
+                )}
+
+                {/* Play */}
                 <Pressable
-                  style={[styles.button, readyToCheck && styles.buttonCheckReady]}
-                  onPress={checkSolution}
+                  style={[styles.buttonWide, poolDisabled && styles.buttonDisabled]}
+                  onPress={loadNextPuzzleFromPool}
+                  disabled={poolDisabled}
+                >
+                  <Text style={styles.buttonText}>
+                    Play next puzzle {pool ? `(${poolRemaining} left)` : "(pool unavailable)"}
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  style={[styles.buttonWide, poolDisabled && styles.buttonDisabled]}
+                  onPress={loadRandomPuzzleFromPool}
+                  disabled={poolDisabled}
+                >
+                  <Text style={styles.buttonText}>
+                    Random puzzle (from pool) {pool ? `(${poolRemaining} left)` : "(pool unavailable)"}
+                  </Text>
+                </Pressable>
+
+                {/* Generate */}
+                <Pressable
+                  style={[styles.buttonWide, startDisabled && styles.buttonDisabled]}
+                  onPress={() => generatePuzzleForDifficulty(poolId)}
+                  disabled={startDisabled}
+                >
+                  <Text style={styles.buttonText}>Generate new puzzle ({poolTitle(poolId)})</Text>
+                </Pressable>
+
+                {/* Pool admin */}
+                {poolAvailable && (
+                  <Pressable
+                    onPress={handleResetPoolProgress}
+                    disabled={startDisabled}
+                    style={[styles.linkWrap, startDisabled && styles.buttonDisabled]}
+                  >
+                    <Text style={styles.linkText}>Reset pool progress</Text>
+                  </Pressable>
+                )}
+
+                <Text style={styles.startNote}>
+                  Tip: pool puzzles start instantly. Generator may take a while on some devices.
+                </Text>
+              </View>
+
+              {status !== "" && (
+                <Text
+                  style={[
+                    styles.status,
+                    statusOk === true ? styles.statusOk : statusOk === false ? styles.statusError : null,
+                  ]}
+                >
+                  {status}
+                </Text>
+              )}
+            </>
+          )}
+
+          {screen === "game" && puzzle && (
+            <>
+              <View style={styles.grid}>
+                {Array.from({ length: N }, (_, r) => (
+                  <View key={r} style={styles.row}>
+                    {Array.from({ length: N }, (_, c) => renderCell(r, c))}
+                  </View>
+                ))}
+              </View>
+
+              {/* Row: Check */}
+              <View style={styles.checkWrap}>
+                <Animated.View style={{ transform: [{ scale: checkPulse }] }}>
+                  <Pressable
+                    style={[styles.button, readyToCheck && styles.buttonCheckReady]}
+                    onPress={checkSolution}
+                    disabled={isGenerating}
+                  >
+                    <Text style={styles.buttonText}>Check</Text>
+                  </Pressable>
+                </Animated.View>
+              </View>
+
+              {/* Row: Undo / Redo / Clear */}
+              <View style={styles.buttonsRow}>
+                <Pressable
+                  style={[styles.button, (!canUndo || isGenerating) && styles.buttonDisabled]}
+                  onPress={undo}
+                  disabled={!canUndo || isGenerating}
+                >
+                  <Text style={styles.buttonText}>Undo</Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.button, (!canRedo || isGenerating) && styles.buttonDisabled]}
+                  onPress={redo}
+                  disabled={!canRedo || isGenerating}
+                >
+                  <Text style={styles.buttonText}>Redo</Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.button, isGenerating && styles.buttonDisabled]}
+                  onPress={clearBoard}
                   disabled={isGenerating}
                 >
-                  <Text style={styles.buttonText}>Check</Text>
+                  <Text style={styles.buttonText}>Clear</Text>
                 </Pressable>
-              </Animated.View>
-            </View>
+              </View>
 
-            {/* Row: Undo / Redo / Clear */}
-            <View style={styles.buttonsRow}>
+              {/* Show / Hide solution */}
+              {!isSolved && (
+                <Pressable style={styles.toggle} onPress={toggleShowSolution} disabled={isGenerating}>
+                  <Text style={styles.toggleText}>{showSolution ? "Hide solution" : "Show solution"}</Text>
+                </Pressable>
+              )}
+
+              {/* New game */}
               <Pressable
-                style={[styles.button, (!canUndo || isGenerating) && styles.buttonDisabled]}
-                onPress={undo}
-                disabled={!canUndo || isGenerating}
-              >
-                <Text style={styles.buttonText}>Undo</Text>
-              </Pressable>
-              <Pressable
-                style={[styles.button, (!canRedo || isGenerating) && styles.buttonDisabled]}
-                onPress={redo}
-                disabled={!canRedo || isGenerating}
-              >
-                <Text style={styles.buttonText}>Redo</Text>
-              </Pressable>
-              <Pressable
-                style={[styles.button, isGenerating && styles.buttonDisabled]}
-                onPress={clearBoard}
+                style={[styles.buttonWide, isGenerating && styles.buttonDisabled]}
+                onPress={newGame}
                 disabled={isGenerating}
               >
-                <Text style={styles.buttonText}>Clear</Text>
+                <Text style={styles.buttonText}>New game</Text>
               </Pressable>
-            </View>
 
-            {/* Show / Hide solution */}
-            {!isSolved && (
-              <Pressable
-                style={styles.toggle}
-                onPress={toggleShowSolution}
-                disabled={isGenerating}
-              >
-                <Text style={styles.toggleText}>
-                  {showSolution ? "Hide solution" : "Show solution"}
+              {status !== "" && (
+                <Text
+                  style={[
+                    styles.status,
+                    statusOk === true ? styles.statusOk : statusOk === false ? styles.statusError : null,
+                  ]}
+                >
+                  {status}
                 </Text>
-              </Pressable>
-            )}
-
-            {/* New game */}
-            <Pressable
-              style={[styles.buttonWide, isGenerating && styles.buttonDisabled]}
-              onPress={newGame}
-              disabled={isGenerating}
-            >
-              <Text style={styles.buttonText}>New game</Text>
-            </Pressable>
-
-            {status !== "" && (
-              <Text
-                style={[
-                  styles.status,
-                  statusOk === true ? styles.statusOk : statusOk === false ? styles.statusError : null,
-                ]}
-              >
-                {status}
-              </Text>
-            )}
-          </>
-        )}
-      </View>
+              )}
+            </>
+          )}
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -856,12 +950,61 @@ const styles = StyleSheet.create({
     color: "#555",
     marginBottom: 12,
   },
+
   startWrap: {
     width: "100%",
     maxWidth: 420,
     alignItems: "center",
     marginTop: 8,
   },
+
+  helpButton: {
+    width: "100%",
+    maxWidth: 420,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#2563eb",
+    backgroundColor: "#fff",
+    alignItems: "center",
+    marginBottom: 10,
+  },
+  helpButtonText: {
+    color: "#2563eb",
+    fontWeight: "700",
+  },
+
+  tabsRow: {
+    flexDirection: "row",
+    width: "100%",
+    maxWidth: 420,
+    marginBottom: 10,
+    gap: 8,
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    backgroundColor: "#fff",
+    alignItems: "center",
+  },
+  tabActive: {
+    backgroundColor: "#2563eb",
+    borderColor: "#2563eb",
+  },
+  tabDisabled: {
+    opacity: 0.6,
+  },
+  tabText: {
+    color: "#111827",
+    fontWeight: "600",
+  },
+  tabTextActive: {
+    color: "#fff",
+  },
+
   startHint: {
     fontSize: 14,
     color: "#374151",
@@ -874,6 +1017,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
     maxWidth: 360,
   },
+
   grid: {
     borderColor: "#000",
     marginBottom: 16,
@@ -909,11 +1053,13 @@ const styles = StyleSheet.create({
   cellClueAreaViolation: {
     backgroundColor: "#fef3c7",
   },
+
   buttonsRow: {
     flexDirection: "row",
     marginBottom: 8,
     gap: 8,
   },
+
   button: {
     backgroundColor: "#3b82f6",
     paddingHorizontal: 12,
@@ -943,6 +1089,7 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: "#111827",
   },
+
   toggle: {
     marginBottom: 6,
   },
@@ -950,6 +1097,7 @@ const styles = StyleSheet.create({
     color: "#2563eb",
     textDecorationLine: "underline",
   },
+
   status: {
     marginTop: 10,
     fontSize: 14,
@@ -962,6 +1110,7 @@ const styles = StyleSheet.create({
   statusError: {
     color: "#dc2626",
   },
+
   generating: {
     flexDirection: "row",
     alignItems: "center",
@@ -975,6 +1124,7 @@ const styles = StyleSheet.create({
   checkWrap: {
     marginBottom: 10,
   },
+
   linkWrap: {
     marginTop: 10,
     paddingVertical: 6,

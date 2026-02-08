@@ -4,7 +4,7 @@ import { cluesToMap, countClues } from "./fixtures";
 
 describe("makePuzzle()", () => {
   it("returns a puzzle whose solution is valid & matches all shown clues", () => {
-    const p = makePuzzle({ dense: false });
+    const p = makePuzzle({ extraClues: 0, nonEmptyBlocks: false });
 
     // Check solution has correct row/col/block totals by indirect means:
     // full clue set must produce exactly 1 solution when used as constraints.
@@ -25,33 +25,61 @@ describe("makePuzzle()", () => {
     }
   });
 
-  it("dense:true enforces minimum clue density constraints", () => {
-    const p = makePuzzle({ dense: true });
-  
-    // 1) At least 22 clues
-    let total = 0;
-    for (let r = 0; r < N; r++) {
-      for (let c = 0; c < N; c++) {
-        if (p.puzzleClues[r][c] !== null) total++;
-      }
-    }
-    expect(total).toBeGreaterThanOrEqual(22);
-  
-    // 2) At least one clue in each 3x3 block
-    for (let br = 0; br < 3; br++) {
-      for (let bc = 0; bc < 3; bc++) {
-        let hasClue = false;
-        for (let r = br * 3; r < br * 3 + 3; r++) {
-          for (let c = bc * 3; c < bc * 3 + 3; c++) {
-            if (p.puzzleClues[r][c] !== null) {
-              hasClue = true;
-              break;
-            }
+  it("nonEmptyBlocks:true enforces at least one clue per 3x3 block", () => {
+  const p = makePuzzle({ nonEmptyBlocks: true });
+
+  for (let br = 0; br < 3; br++) {
+    for (let bc = 0; bc < 3; bc++) {
+      let hasClue = false;
+      for (let r = br * 3; r < br * 3 + 3; r++) {
+        for (let c = bc * 3; c < bc * 3 + 3; c++) {
+          if (p.puzzleClues[r][c] !== null) {
+            hasClue = true;
+            break;
           }
-          if (hasClue) break;
         }
-        expect(hasClue).toBe(true);
+        if (hasClue) break;
       }
+      expect(hasClue).toBe(true);
     }
-  });
+  }
+});
+
+  it("extraClues adds at least the requested number of extra clues (same RNG)", () => {
+    function mulberry32(seed: number): () => number {
+      let t = seed >>> 0;
+      return () => {
+        t += 0x6d2b79f5;
+        let x = Math.imul(t ^ (t >>> 15), 1 | t);
+        x ^= x + Math.imul(x ^ (x >>> 7), 61 | x);
+        return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
+      };
+    }
+
+    const countClues = (puz: Puzzle) => {
+      let total = 0;
+      for (let r = 0; r < N; r++) {
+        for (let c = 0; c < N; c++) {
+          if (puz.puzzleClues[r][c] !== null) total++;
+        }
+      }
+      return total;
+    };
+
+    const seed = 12345;
+
+    const base = makePuzzle({
+      extraClues: 0,
+      nonEmptyBlocks: false,
+      rng: mulberry32(seed),
+    });
+
+    const extra = makePuzzle({
+      extraClues: 3,
+      nonEmptyBlocks: false,
+      rng: mulberry32(seed),
+    });
+
+    expect(countClues(extra)).toBeGreaterThanOrEqual(countClues(base) + 3);
+  });  
 });

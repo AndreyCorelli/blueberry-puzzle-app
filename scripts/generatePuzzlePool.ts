@@ -10,20 +10,26 @@ import { makePuzzle, N } from "../src/core/blueberryCore";
 
 type Args = {
   count: number;
-  dense: boolean;
   outPath: string;
   sort: boolean;
-};
 
+  // NEW generator knobs
+  extraClues: number;      // -x N (>= 0)
+  nonEmptyBlocks: boolean; // -ne (ensure every 3x3 block has >=1 clue)
+};
 
 function parseArgs(argv: string[]): Args {
   let count = 1;
-  let dense = false;
   let outPath = "assets/pool/puzzlePool.v1.json";
   let sort = false;
 
+  // new
+  let extraClues = 0;
+  let nonEmptyBlocks = false;
+
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
+
     if (a === "--count" || a === "-n") {
       const v = argv[i + 1];
       if (!v) throw new Error("Missing value for --count");
@@ -32,8 +38,6 @@ function parseArgs(argv: string[]): Args {
         throw new Error(`Invalid --count: ${v}`);
       }
       i++;
-    } else if (a === "--dense" || a === "--more-clues") {
-      dense = true;
     } else if (a === "--out" || a === "-o") {
       const v = argv[i + 1];
       if (!v) throw new Error("Missing value for --out");
@@ -41,12 +45,22 @@ function parseArgs(argv: string[]): Args {
       i++;
     } else if (a === "--sort") {
       sort = true;
+    } else if (a === "-x" || a === "--extra-clues") {
+      const v = argv[i + 1];
+      if (!v) throw new Error("Missing value for -x/--extra-clues");
+      extraClues = Number(v);
+      if (!Number.isFinite(extraClues) || !Number.isInteger(extraClues) || extraClues < 0) {
+        throw new Error(`Invalid -x/--extra-clues: ${v} (must be integer >= 0)`);
+      }
+      i++;
+    } else if (a === "-ne" || a === "--non-empty-blocks") {
+      nonEmptyBlocks = true;
     } else if (a === "--help" || a === "-h") {
       printHelpAndExit();
     }
   }
 
-  return { count, dense, outPath, sort };
+  return { count, outPath, sort, extraClues, nonEmptyBlocks };
 }
 
 function printHelpAndExit(): never {
@@ -54,16 +68,21 @@ function printHelpAndExit(): never {
 Generate and maintain a pool of Blueberry puzzles.
 
 Generate / append:
-  npm run pool:gen -- --count 300 [--dense] [--out <path>]
+  npm run pool:gen -- --count 300 -x 5 [-ne] [--out <path>]
 
 Sort existing pool in-place:
   npm run pool:sort -- [--out <path>]
 
 Options:
-  --count, -n        Number of puzzles to generate (required for generation)
-  --dense            Use "more clues" mode
-  --out, -o          Output JSON file path (default: assets/pool/puzzlePool.v1.json)
-  --sort             Sort pool by score and save back
+  --count, -n               Number of puzzles to generate (required for generation)
+  -x, --extra-clues <N>     Extra clues to add after minimization (integer >= 0, default: 0)
+  -ne, --non-empty-blocks   Ensure each 3x3 block has >= 1 clue; if empty, add a random clue in it
+  --out, -o                 Output JSON file path (default: assets/pool/puzzlePool.v1.json)
+  --sort                    Sort pool by score and save back
+
+Notes:
+  -x controls how much easier the puzzle is (more clues = easier).
+  -ne guarantees no completely empty 3x3 clue-blocks (useful for early onboarding).
 `);
   process.exit(0);
 }
@@ -71,8 +90,8 @@ Options:
 // ---------- Pool format ----------
 
 type PuzzleEntryV1 = {
-  genSeconds: number;  // duration to generate (rough complexity proxy)
-  humanComplex: number; // default 0
+  genSeconds: number;   // duration to generate (rough complexity proxy)
+  humanComplex: number; // heuristic score, optional usage
   clues81: number[];    // length 81; -1 = empty cell; 0..8 = clue value
 };
 
@@ -80,7 +99,11 @@ type PuzzlePoolV1 = {
   version: 1;
   N: number; // 9
   generatedAtUtc: string;
-  dense: boolean;
+
+  // NEW metadata (optional, but super helpful)
+  extraClues: number;
+  nonEmptyBlocks: boolean;
+
   puzzles: PuzzleEntryV1[];
 };
 
@@ -115,13 +138,14 @@ function ensureDirForFile(filePath: string): void {
   fs.mkdirSync(dir, { recursive: true });
 }
 
-function readPoolIfExists(filePath: string, dense: boolean): PuzzlePoolV1 {
+function readPoolIfExists(filePath: string, meta: { extraClues: number; nonEmptyBlocks: boolean }): PuzzlePoolV1 {
   if (!fs.existsSync(filePath)) {
     return {
       version: 1,
       N,
       generatedAtUtc: new Date().toISOString(),
-      dense,
+      extraClues: meta.extraClues,
+      nonEmptyBlocks: meta.nonEmptyBlocks,
       puzzles: [],
     };
   }
@@ -132,8 +156,12 @@ function readPoolIfExists(filePath: string, dense: boolean): PuzzlePoolV1 {
   // minimal sanity checks
   if (parsed.version !== 1) throw new Error(`Unsupported pool version: ${parsed.version}`);
   if (parsed.N !== N) throw new Error(`Pool N mismatch: file=${parsed.N}, code=${N}`);
-
   if (!Array.isArray(parsed.puzzles)) throw new Error("Pool puzzles must be an array");
+
+  // If file meta differs from CLI meta, we keep the file puzzles but overwrite meta to reflect current settings.
+  parsed.extraClues = meta.extraClues;
+  parsed.nonEmptyBlocks = meta.nonEmptyBlocks;
+
   return parsed;
 }
 
@@ -155,7 +183,10 @@ async function main() {
   const outFile = path.resolve(projectRoot, args.outPath);
   ensureDirForFile(outFile);
 
-  const pool = readPoolIfExists(outFile, args.dense);
+  const pool = readPoolIfExists(outFile, {
+    extraClues: args.extraClues,
+    nonEmptyBlocks: args.nonEmptyBlocks,
+  });
 
   if (args.sort) {
     // eslint-disable-next-line no-console
@@ -164,7 +195,7 @@ async function main() {
     console.log(`Pool size: ${pool.puzzles.length}`);
 
     sortPoolInPlace(pool);
-    pool.generatedAtUtc = new Date().toISOString(); // optional, but nice metadata signal
+    pool.generatedAtUtc = new Date().toISOString();
     writePoolAtomic(outFile, pool);
 
     // eslint-disable-next-line no-console
@@ -172,7 +203,7 @@ async function main() {
     return;
   }
 
-  // Resolve project root relative to this script file  // Handle Ctrl+C gracefully: write what we have so far.
+  // Handle Ctrl+C gracefully: write what we have so far.
   let interrupted = false;
   process.on("SIGINT", () => {
     interrupted = true;
@@ -183,7 +214,7 @@ async function main() {
   // eslint-disable-next-line no-console
   console.log(`Appending ${args.count} puzzle(s) to: ${args.outPath}`);
   // eslint-disable-next-line no-console
-  console.log(`Mode: ${args.dense ? "dense (more clues)" : "default"}`);
+  console.log(`Mode: extraClues=${args.extraClues}, nonEmptyBlocks=${args.nonEmptyBlocks ? "ON" : "OFF"}`);
   // eslint-disable-next-line no-console
   console.log(`Already in pool: ${pool.puzzles.length}`);
 
@@ -191,30 +222,35 @@ async function main() {
     if (interrupted) break;
 
     const t0 = performance.now();
-    const p = makePuzzle({ dense: args.dense });
+    const p = makePuzzle({
+      extraClues: args.extraClues,
+      nonEmptyBlocks: args.nonEmptyBlocks,
+    });
     const t1 = performance.now();
 
     const genSeconds = (t1 - t0) / 1000;
     const clues81 = encodeCluesTo81(p.puzzleClues);
     validateClues81(clues81);
 
+    // very rough heuristic: fewer extra clues => harder
+    const humanComplex = 200 + Math.max(0, 20 - args.extraClues) * 10 + (args.nonEmptyBlocks ? -15 : 0);
+
     const entry: PuzzleEntryV1 = {
       genSeconds: Number(genSeconds.toFixed(3)),
-      humanComplex: args.dense ? 100 : 200,
+      humanComplex,
       clues81,
     };
 
     pool.puzzles.push(entry);
 
-    // Write incrementally each time so you can run it “in the background”
-    // and not lose progress if it crashes midway.
+    // write incrementally so you don't lose progress on long runs
     pool.generatedAtUtc = new Date().toISOString();
+    pool.extraClues = args.extraClues;
+    pool.nonEmptyBlocks = args.nonEmptyBlocks;
     writePoolAtomic(outFile, pool);
 
     // eslint-disable-next-line no-console
-    console.log(
-      `#${pool.puzzles.length} generated in ${entry.genSeconds}s (this run ${i + 1}/${args.count})`
-    );
+    console.log(`#${pool.puzzles.length} generated in ${entry.genSeconds}s (this run ${i + 1}/${args.count})`);
   }
 
   // eslint-disable-next-line no-console
@@ -230,7 +266,7 @@ function score(entry: { humanComplex: number; genSeconds: number }): number {
 function sortPoolInPlace(pool: PuzzlePoolV1): void {
   // stable sort: keep original order for equal scores
   const withIndex = pool.puzzles.map((p, i) => ({ p, i, s: score(p) }));
-  withIndex.sort((a, b) => (a.s - b.s) || (a.i - b.i));
+  withIndex.sort((a, b) => a.s - b.s || a.i - b.i);
   pool.puzzles = withIndex.map((x) => x.p);
 }
 

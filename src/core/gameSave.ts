@@ -3,6 +3,7 @@ import type { Puzzle } from "../core/blueberryCore";
 
 export type PlayerCellState = -1 | 0 | 1;
 
+export type PoolId = "easy" | "medium" | "hard";
 export type PuzzleSource = "generated" | "pool";
 
 export type SavedGameV1 = {
@@ -19,8 +20,11 @@ export type SavedGameV1 = {
 
   // optional: remember what "next puzzle difficulty" was set to
   useDense: boolean;
+
+  // meta
   puzzleSource?: PuzzleSource;
   poolIndex?: number | null; // 0-based index in pool
+  poolId?: PoolId | null;    // NEW: which pool the poolIndex belongs to
 };
 
 // ---------- Pool types ----------
@@ -33,47 +37,31 @@ export type PuzzleEntryV1 = {
 
 export type PuzzlePoolV1 = {
   version: 1;
-  N: number;                 // expected 9
+  N: number; // expected 9
   generatedAtUtc: string;
   puzzles: PuzzleEntryV1[];
 };
 
 export type PoolProgressV1 = {
   v: 1;
-  poolVersion: string;     // you decide what to put here (e.g. generatedAtUtc or your own string)
+  poolVersion: string; // e.g. generatedAtUtc or your own string
 
-  loaded: number[];        // indexes already loaded (sorted not required)
-  solved: number[];        // indexes solved (optional usage now)
+  loaded: number[]; // indexes already loaded (sorted not required)
+  solved: number[]; // indexes solved (optional usage now)
 };
-
 
 type SolveFromCluesFn = (puzzleClues: (number | null)[][]) => number[][]; // returns solution board (0/1)
 
-export function decodeClues81ToGrid(clues81: number[], N: number): (number | null)[][] {
-  if (clues81.length !== N * N) {
-    throw new Error(`clues81 length mismatch: got ${clues81.length}, expected ${N * N}`);
-  }
-  const grid: (number | null)[][] = Array.from({ length: N }, () => new Array<number | null>(N).fill(null));
-  let k = 0;
-  for (let r = 0; r < N; r++) {
-    for (let c = 0; c < N; c++) {
-      const v = clues81[k++];
-      if (v === -1) grid[r][c] = null;
-      else {
-        if (!Number.isInteger(v) || v < 0 || v > 8) {
-          throw new Error(`Invalid clue value in pool: ${v}`);
-        }
-        grid[r][c] = v;
-      }
-    }
-  }
-  return grid;
-}
+// ---------- constants ----------
 
 const STORAGE_KEY = "blueberry:lastGame:v1";
-const POOL_PROGRESS_KEY = "blueberry:poolProgress:v1";
+const POOL_PROGRESS_KEY_PREFIX = "blueberry:poolProgress:v1";
 
 // ---------- helpers ----------
+
+function poolProgressKey(poolId: PoolId): string {
+  return `${POOL_PROGRESS_KEY_PREFIX}:${poolId}`;
+}
 
 function is2D<T>(x: unknown, rows: number, cols: number): x is T[][] {
   if (!Array.isArray(x) || x.length !== rows) return false;
@@ -89,9 +77,14 @@ function isPlayerCell(v: unknown): v is PlayerCellState {
   return v === -1 || v === 0 || v === 1;
 }
 
+function isPoolId(v: unknown): v is PoolId {
+  return v === "easy" || v === "medium" || v === "hard";
+}
+
 function validateSavedGameV1(x: unknown, N: number): x is SavedGameV1 {
   if (!x || typeof x !== "object") return false;
   const o = x as any;
+
   if (o.v !== 1) return false;
   if (typeof o.savedAt !== "number") return false;
   if (typeof o.useDense !== "boolean") return false;
@@ -101,6 +94,8 @@ function validateSavedGameV1(x: unknown, N: number): x is SavedGameV1 {
   if (!p || typeof p !== "object") return false;
   if (!is2D<number>(p.solution, N, N)) return false;
   if (!is2D<number | null>(p.puzzleClues, N, N)) return false;
+
+  // meta
   if (o.puzzleSource !== undefined && o.puzzleSource !== "generated" && o.puzzleSource !== "pool") {
     return false;
   }
@@ -108,6 +103,9 @@ function validateSavedGameV1(x: unknown, N: number): x is SavedGameV1 {
     return false;
   }
   if (typeof o.poolIndex === "number" && (!Number.isInteger(o.poolIndex) || o.poolIndex < 0)) {
+    return false;
+  }
+  if (o.poolId !== undefined && o.poolId !== null && !isPoolId(o.poolId)) {
     return false;
   }
 
@@ -130,7 +128,53 @@ function validateSavedGameV1(x: unknown, N: number): x is SavedGameV1 {
   return true;
 }
 
-// ---------- API ----------
+export function decodeClues81ToGrid(clues81: number[], N: number): (number | null)[][] {
+  if (clues81.length !== N * N) {
+    throw new Error(`clues81 length mismatch: got ${clues81.length}, expected ${N * N}`);
+  }
+  const grid: (number | null)[][] = Array.from({ length: N }, () =>
+    new Array<number | null>(N).fill(null),
+  );
+  let k = 0;
+  for (let r = 0; r < N; r++) {
+    for (let c = 0; c < N; c++) {
+      const v = clues81[k++];
+      if (v === -1) grid[r][c] = null;
+      else {
+        if (!Number.isInteger(v) || v < 0 || v > 8) {
+          throw new Error(`Invalid clue value in pool: ${v}`);
+        }
+        grid[r][c] = v;
+      }
+    }
+  }
+  return grid;
+}
+
+function uniqSorted(nums: number[]): number[] {
+  return Array.from(new Set(nums)).sort((a, b) => a - b);
+}
+
+function toSet(nums: number[]): Set<number> {
+  return new Set(nums);
+}
+
+function validatePoolProgressV1(x: unknown): x is PoolProgressV1 {
+  if (!x || typeof x !== "object") return false;
+  const o = x as any;
+  if (o.v !== 1) return false;
+  if (typeof o.poolVersion !== "string") return false;
+  if (!Array.isArray(o.loaded) || !o.loaded.every(Number.isInteger)) return false;
+  if (!Array.isArray(o.solved) || !o.solved.every(Number.isInteger)) return false;
+  return true;
+}
+
+// You can choose how to define "poolVersion". A pragmatic default is pool.generatedAtUtc.
+export function getPoolVersion(pool: PuzzlePoolV1): string {
+  return `v${pool.version}|N${pool.N}|t${pool.generatedAtUtc}`;
+}
+
+// ---------- API: saved game ----------
 
 export async function loadSavedGame(N: number): Promise<SavedGameV1 | null> {
   const raw = await AsyncStorage.getItem(STORAGE_KEY);
@@ -153,7 +197,7 @@ export async function clearSavedGame(): Promise<void> {
   await AsyncStorage.removeItem(STORAGE_KEY);
 }
 
-// ---------- debounced saver ----------
+// ---------- API: debounced saver ----------
 
 let timer: ReturnType<typeof setTimeout> | null = null;
 let pending: SavedGameV1 | null = null;
@@ -211,33 +255,13 @@ export function buildPuzzleFromPoolIndex(
   return { puzzleClues, solution };
 }
 
-function uniqSorted(nums: number[]): number[] {
-  return Array.from(new Set(nums)).sort((a, b) => a - b);
-}
+// ---------- API: pool progress (per poolId) ----------
 
-function toSet(nums: number[]): Set<number> {
-  return new Set(nums);
-}
-
-function validatePoolProgressV1(x: unknown): x is PoolProgressV1 {
-  if (!x || typeof x !== "object") return false;
-  const o = x as any;
-  if (o.v !== 1) return false;
-  if (typeof o.poolVersion !== "string") return false;
-  if (!Array.isArray(o.loaded) || !o.loaded.every(Number.isInteger)) return false;
-  if (!Array.isArray(o.solved) || !o.solved.every(Number.isInteger)) return false;
-  return true;
-}
-
-// You can choose how to define "poolVersion". A pragmatic default is pool.generatedAtUtc.
-export function getPoolVersion(pool: PuzzlePoolV1): string {
-  return `v${pool.version}|N${pool.N}|t${pool.generatedAtUtc}`;
-}
-
-export async function loadPoolProgress(pool: PuzzlePoolV1): Promise<PoolProgressV1> {
+export async function loadPoolProgress(poolId: PoolId, pool: PuzzlePoolV1): Promise<PoolProgressV1> {
+  const key = poolProgressKey(poolId);
   const poolVersion = getPoolVersion(pool);
 
-  const raw = await AsyncStorage.getItem(POOL_PROGRESS_KEY);
+  const raw = await AsyncStorage.getItem(key);
   if (!raw) {
     return { v: 1, poolVersion, loaded: [], solved: [] };
   }
@@ -262,21 +286,30 @@ export async function loadPoolProgress(pool: PuzzlePoolV1): Promise<PoolProgress
   }
 }
 
-export async function savePoolProgress(progress: PoolProgressV1): Promise<void> {
-  await AsyncStorage.setItem(POOL_PROGRESS_KEY, JSON.stringify(progress));
+export async function savePoolProgress(poolId: PoolId, progress: PoolProgressV1): Promise<void> {
+  const key = poolProgressKey(poolId);
+  await AsyncStorage.setItem(key, JSON.stringify(progress));
 }
 
-export async function markPoolIndexLoaded(pool: PuzzlePoolV1, index: number): Promise<PoolProgressV1> {
-  const progress = await loadPoolProgress(pool);
+export async function markPoolIndexLoaded(
+  poolId: PoolId,
+  pool: PuzzlePoolV1,
+  index: number,
+): Promise<PoolProgressV1> {
+  const progress = await loadPoolProgress(poolId, pool);
   progress.loaded = uniqSorted([...progress.loaded, index]);
-  await savePoolProgress(progress);
+  await savePoolProgress(poolId, progress);
   return progress;
 }
 
-export async function markPoolIndexSolved(pool: PuzzlePoolV1, index: number): Promise<PoolProgressV1> {
-  const progress = await loadPoolProgress(pool);
+export async function markPoolIndexSolved(
+  poolId: PoolId,
+  pool: PuzzlePoolV1,
+  index: number,
+): Promise<PoolProgressV1> {
+  const progress = await loadPoolProgress(poolId, pool);
   progress.solved = uniqSorted([...progress.solved, index]);
-  await savePoolProgress(progress);
+  await savePoolProgress(poolId, progress);
   return progress;
 }
 
@@ -295,33 +328,11 @@ export function getRandomNotLoadedIndex(pool: PuzzlePoolV1, progress: PoolProgre
     if (!loaded.has(i)) remaining.push(i);
   }
   if (remaining.length === 0) return null;
-  const pick = remaining[Math.floor(Math.random() * remaining.length)];
-  return pick;
+  return remaining[Math.floor(Math.random() * remaining.length)];
 }
 
-// Reset progress for the CURRENT pool version.
-// If the stored progress belongs to another pool version, we also clear it (safe).
-export async function resetPoolProgress(pool: PuzzlePoolV1): Promise<void> {
-  const raw = await AsyncStorage.getItem(POOL_PROGRESS_KEY);
-  if (!raw) return;
-
-  try {
-    const parsed = JSON.parse(raw) as any;
-
-    // If you store poolVersion in progress (recommended), clear only if it matches.
-    // If you don't store poolVersion, just remove the key.
-    const currentVersion = getPoolVersion(pool);
-    const storedVersion = typeof parsed?.poolVersion === "string" ? parsed.poolVersion : null;
-
-    if (!storedVersion || storedVersion === currentVersion) {
-      await AsyncStorage.removeItem(POOL_PROGRESS_KEY);
-      return;
-    }
-
-    // Stored progress belongs to some other pool; still OK to clear (simplifies UX).
-    await AsyncStorage.removeItem(POOL_PROGRESS_KEY);
-  } catch {
-    // Corrupt payload → clear it
-    await AsyncStorage.removeItem(POOL_PROGRESS_KEY);
-  }
+// Reset progress for a given poolId (independent keys per difficulty)
+export async function resetPoolProgress(poolId: PoolId): Promise<void> {
+  const key = poolProgressKey(poolId);
+  await AsyncStorage.removeItem(key);
 }
